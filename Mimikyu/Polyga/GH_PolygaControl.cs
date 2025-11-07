@@ -73,7 +73,6 @@ namespace Mimikyu.Polyga
             if (!DA.GetData(1, ref trigger)) return;
             if (!DA.GetData(2, ref captureColor)) return;
             if (!DA.GetData(3, ref colorExposure)) return;
-            if (!DA.GetData(3, ref colorExposure)) return;
             if (!DA.GetData(4, ref scannerExposure)) return;
             DA.GetData(5, ref whiteBalance);
             DA.GetData(6, ref flashEnabled);
@@ -83,100 +82,123 @@ namespace Mimikyu.Polyga
             if (!enabled)
             {
                 if (scanner != null)
-                    scanner.disconnect();
+                {
+                    try
+                    {
+                        scanner.disconnect();
+                    }
+                    catch (Exception ex)
+                    {
+                        AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, "Error disconnecting: " + ex.Message);
+                    }
+                }
                 return;
             }
 
-
-            if (scanner == null)
+            try
             {
-                List<SBDeviceInfo> devList = SBFactory.getDevices();
-                if (devList.Count == 0)
+                if (scanner == null)
                 {
-                    AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "No camera found.");
-                    return;
-                }
-                SBStatus status = SBStatus.DEVICE_NOT_CONNECTED;
-                foreach (var dev in devList)
-                {
-                    scanner = SBFactory.createDevice(dev);
-                    status = scanner.connect();
-                    if (status == SBStatus.OK)
+                    List<SBDeviceInfo> devList = SBFactory.getDevices();
+                    if (devList.Count == 0)
                     {
-                        break;
+                        AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "No camera found.");
+                        return;
+                    }
+                    SBStatus status = SBStatus.DEVICE_NOT_CONNECTED;
+                    foreach (var dev in devList)
+                    {
+                        scanner = SBFactory.createDevice(dev);
+                        status = scanner.connect();
+                        if (status == SBStatus.OK)
+                        {
+                            break;
+                        }
+                    }
+                    if (status != SBStatus.OK)
+                        AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Status not ok: " + status);
+                }
+
+
+                if (!scanner.isConnected())
+                {
+                    SBStatus status = scanner.connect();
+                    if (status != SBStatus.OK)
+                    {
+                        AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Status not ok: " + status);
+                        return;
                     }
                 }
-                if (status != SBStatus.OK)
-                    AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Status not ok: " + status);
-            }
 
-
-            if (!scanner.isConnected())
-            {
-                SBStatus status = scanner.connect();
-                if (status != SBStatus.OK)
+                if (scannerExposure < minExposure || scannerExposure > maxExposure)
                 {
-                    AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Status not ok: " + status);
+                    AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Camera exposure needs to be between: " + minExposure + "-" + maxExposure);
                     return;
                 }
-            }
 
-            if (scannerExposure < minExposure || scannerExposure > maxExposure)
-            {
-                AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Camera exposure needs to be between: " + minExposure + "-" + maxExposure);
-                return;
-            }
-
-            if (trigger)
-            {
-                SBMesh mesh = new SBMesh();
-
-
-                SBProcessParams processParams = new SBProcessParams();
-                SBCaptureParams captureParams = new SBCaptureParams();
-
-                captureParams.textureEnable = captureColor;
-                captureParams.textureExposure = colorExposure;
-
-                scanner.setWhiteBalance((float)whiteBalance.X, (float)whiteBalance.Y, (float)whiteBalance.Z);
-
-                scanner.setCameraExposure(scannerExposure);
-                scanner.setCameraGain(gain);
-                scanner.setProjectorBrightness(brightness);
-
-                if (flashEnabled)
+                if (trigger)
                 {
-                    scanner.setProjectorPattern(SBProjectorPatternEnums.WHITE);
-                }
-                else
-                {
-                    scanner.setProjectorPattern(SBProjectorPatternEnums.BLACK);
-                    scanner.setExternalFlashForTexturePreview(true);
-
-                }
-                scanner.scan(out mesh, processParams, captureParams);
+                    SBMesh mesh = new SBMesh();
 
 
+                    SBProcessParams processParams = new SBProcessParams();
+                    SBCaptureParams captureParams = new SBCaptureParams();
 
+                    captureParams.textureEnable = captureColor;
+                    captureParams.textureExposure = colorExposure;
 
-                if (mesh == null)
-                {
-                    AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Failed to  get mesh");
-                }
-                else
-                {
-                    var vertices = mesh.getVertices();
-                    var colorsReturned = mesh.getVertexColors();
+                    scanner.setWhiteBalance((float)whiteBalance.X, (float)whiteBalance.Y, (float)whiteBalance.Z);
 
-                    pointCloud = new List<GH_Point>();
-                    colors = new List<GH_Colour>();
+                    scanner.setCameraExposure(scannerExposure);
+                    scanner.setCameraGain(gain);
+                    scanner.setProjectorBrightness(brightness);
 
-                    for (var i = 0; i < vertices.Count; i++)
+                    if (flashEnabled)
                     {
-                        pointCloud.Add(new GH_Point(new Point3d(vertices[i].x, vertices[i].y, vertices[i].z)));
-                        colors.Add(new GH_Colour(Color.FromArgb(colorsReturned[i].r, colorsReturned[i].g, colorsReturned[i].b)));
+                        scanner.setProjectorPattern(SBProjectorPatternEnums.WHITE);
+                    }
+                    else
+                    {
+                        scanner.setProjectorPattern(SBProjectorPatternEnums.BLACK);
+                        scanner.setExternalFlashForTexturePreview(true);
+
+                    }
+                    scanner.scan(out mesh, processParams, captureParams);
+
+
+
+
+                    if (mesh == null)
+                    {
+                        AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Failed to  get mesh");
+                    }
+                    else
+                    {
+                        var vertices = mesh.getVertices();
+                        var colorsReturned = mesh.getVertexColors();
+
+                        pointCloud = new List<GH_Point>();
+                        colors = new List<GH_Colour>();
+
+                        for (var i = 0; i < vertices.Count; i++)
+                        {
+                            pointCloud.Add(new GH_Point(new Point3d(vertices[i].x, vertices[i].y, vertices[i].z)));
+                            colors.Add(new GH_Colour(Color.FromArgb(colorsReturned[i].r, colorsReturned[i].g, colorsReturned[i].b)));
+                        }
                     }
                 }
+            }
+            catch (DllNotFoundException ex)
+            {
+                AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "DLL not found: " + ex.Message + ". Ensure all native DLLs are in the same folder as the .gha file.");
+            }
+            catch (BadImageFormatException ex)
+            {
+                AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Architecture mismatch: " + ex.Message + ". Ensure you're building for x64.");
+            }
+            catch (Exception ex)
+            {
+                AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Error: " + ex.Message + "\nStack: " + ex.StackTrace);
             }
 
             DA.SetDataList(0, pointCloud);
