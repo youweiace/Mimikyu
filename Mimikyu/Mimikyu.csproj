@@ -43,8 +43,12 @@
     <PackageReference Include="System.Drawing.Common" Version="7.0.0" ExcludeAssets="runtime" />
   </ItemGroup>
   <ItemGroup>
+    <Reference Include="dotNetLucidIo">
+      <HintPath>..\..\..\..\OneDrive - Chalmers\Tech\Mimikyu\dotNetLucidIoApi_1_7_0\dotNetLucidIo.dll</HintPath>
+    </Reference>
     <Reference Include="SBSDKNet3">
       <HintPath>..\..\..\..\OneDrive - Chalmers\Tech\Mimikyu\SBSDK_3.3.5\bin\Release\SBSDKNet3.dll</HintPath>
+      <Private></Private>
     </Reference>
   </ItemGroup>
   <ItemGroup>
@@ -61,79 +65,79 @@
     </EmbeddedResource>
   </ItemGroup>
   <ItemGroup>
-    <None Update="Polyga\7z.dll">
+    <None Update="7z.dll">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
-    <None Update="Polyga\BSL430.dll">
+    <None Update="BSL430.dll">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
-    <None Update="Polyga\cyusbserial.dll">
+    <None Update="cyusbserial.dll">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
-    <None Update="Polyga\ftd2xx64.dll">
+    <None Update="ftd2xx64.dll">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
-    <None Update="Polyga\GCBase_MD_VC141_v3_1_Basler_pylon.dll">
+    <None Update="GCBase_MD_VC141_v3_1_Basler_pylon.dll">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
-    <None Update="Polyga\GenApi_MD_VC141_v3_1_Basler_pylon.dll">
+    <None Update="GenApi_MD_VC141_v3_1_Basler_pylon.dll">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
-    <None Update="Polyga\GoSdk.dll">
+    <None Update="GoSdk.dll">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
-    <None Update="Polyga\hidapi.dll">
+    <None Update="hidapi.dll">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
-    <None Update="Polyga\kApi.dll">
+    <None Update="kApi.dll">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
-    <None Update="Polyga\LC3010_API.dll">
+    <None Update="LC3010_API.dll">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
-    <None Update="Polyga\libMPSSE.dll">
+    <None Update="libMPSSE.dll">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
-    <None Update="Polyga\log4cpp_MD_VC141_v3_1_Basler_pylon.dll">
+    <None Update="log4cpp_MD_VC141_v3_1_Basler_pylon.dll">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
-    <None Update="Polyga\Log_MD_VC141_v3_1_Basler_pylon.dll">
+    <None Update="Log_MD_VC141_v3_1_Basler_pylon.dll">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
-    <None Update="Polyga\MathParser_MD_VC141_v3_1_Basler_pylon.dll">
+    <None Update="MathParser_MD_VC141_v3_1_Basler_pylon.dll">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
-    <None Update="Polyga\mcp2221_dll_um_x64.dll">
+    <None Update="mcp2221_dll_um_x64.dll">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
-    <None Update="Polyga\MSP430_Cmd.dll">
+    <None Update="MSP430_Cmd.dll">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
-    <None Update="Polyga\NodeMapData_MD_VC141_v3_1_Basler_pylon.dll">
+    <None Update="NodeMapData_MD_VC141_v3_1_Basler_pylon.dll">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
-    <None Update="Polyga\opencv_world455.dll">
+    <None Update="opencv_world455.dll">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
-    <None Update="Polyga\PylonBase_v6_3.dll">
+    <None Update="PylonBase_v6_3.dll">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
-    <None Update="Polyga\PylonUsb_v6_3_TL.dll">
+    <None Update="PylonUsb_v6_3_TL.dll">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
-    <None Update="Polyga\PylonUtility_v6_3.dll">
+    <None Update="PylonUtility_v6_3.dll">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
-    <None Update="Polyga\SBSDK3.dll">
+    <None Update="SBSDK3.dll">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
-    <None Update="Polyga\uxapi_v13.dll">
+    <None Update="uxapi_v13.dll">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
-    <None Update="Polyga\uxtopapi_v6_3.dll">
+    <None Update="uxtopapi_v6_3.dll">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
-    <None Update="Polyga\XmlParser_MD_VC141_v3_1_Basler_pylon.dll">
+    <None Update="XmlParser_MD_VC141_v3_1_Basler_pylon.dll">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
   </ItemGroup>
