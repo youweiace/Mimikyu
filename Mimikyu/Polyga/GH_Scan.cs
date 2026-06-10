@@ -8,14 +8,14 @@ using System.Drawing;
 
 namespace Mimikyu.Polyga
 {
-    public class GH_PolygaControl : GH_Component
+    public class GH_Scan : GH_Component
     {
         /// <summary>
         /// Initializes a new instance of the GH_PolygaControl class.
         /// </summary>
-        public GH_PolygaControl()
-          : base("PolygaControl", "C",
-              "Control Polyga V1 camera",
+        public GH_Scan()
+          : base("Scan", "S",
+              "Polyga V1 camera scan",
               "Mimikyu", "Polyga")
         {
         }
@@ -163,9 +163,8 @@ namespace Mimikyu.Polyga
                         scanner.setExternalFlashForTexturePreview(true);
 
                     }
+
                     scanner.scan(out mesh, processParams, captureParams);
-
-
 
 
                     if (mesh == null)
@@ -223,7 +222,7 @@ namespace Mimikyu.Polyga
         /// </summary>
         public override Guid ComponentGuid
         {
-            get { return new Guid("03282557-ACEF-40AB-A4D3-ECE0F59085F2"); }
+            get { return new Guid("d1d203da-dac4-4145-a41f-1c056793f2e2"); }
         }
     }
 }

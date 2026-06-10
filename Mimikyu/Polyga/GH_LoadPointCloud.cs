@@ -13,7 +13,7 @@ namespace Mimikyu.Polyga
         /// Initializes a new instance of the GH_LoadPointCloud class.
         /// </summary>
         public GH_LoadPointCloud()
-          : base("LoadPC", "L",
+          : base("LoadCloud", "L",
               "Load Point Cloud",
               "Mimikyu", "Polyga")
         {

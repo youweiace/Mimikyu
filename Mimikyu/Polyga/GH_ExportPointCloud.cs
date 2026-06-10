@@ -14,7 +14,7 @@ namespace Mimikyu.Polyga
         /// Initializes a new instance of the GH_SavePointCloud class.
         /// </summary>
         public GH_ExportPointCloud()
-          : base("ExportPC", "E",
+          : base("ExportCloud", "E",
               "Export Point Cloud",
               "Mimikyu", "Polyga")
         {
