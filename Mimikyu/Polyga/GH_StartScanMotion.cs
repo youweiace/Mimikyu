@@ -26,8 +26,7 @@ namespace Mimikyu.Polyga
         private ScanHandler handler = null;
         private bool isStreaming = false;
         private bool pendingUpdate = false;
-        List<GH_Point> pointCloud = new List<GH_Point>();
-        List<GH_Colour> colors = new List<GH_Colour>();
+        PointCloud pc = new PointCloud();
         double maxExposure = 1000.0;
         double minExposure = 0.0;
         private readonly object lockObject = new object();
@@ -57,8 +56,7 @@ namespace Mimikyu.Polyga
         /// </summary>
         protected override void RegisterOutputParams(GH_Component.GH_OutputParamManager pManager)
         {
-            pManager.AddPointParameter("Points", "P", "The points", GH_ParamAccess.list);
-            pManager.AddColourParameter("Colors", "C", "The colors", GH_ParamAccess.list);
+            pManager.AddGenericParameter("PointCloud", "P", "The points", GH_ParamAccess.list);
         }
 
         /// <summary>
@@ -68,7 +66,7 @@ namespace Mimikyu.Polyga
         protected override void SolveInstance(IGH_DataAccess DA)
         {
             bool connect = false;
-            bool enable = false;
+            bool nable = false;
             bool captureColor = false;
             double colorExposure = 2000;
             double scannerExposure = 10;
@@ -78,7 +76,7 @@ namespace Mimikyu.Polyga
             double gain = 1.0;
 
             if (!DA.GetData(0, ref connect)) return;
-            if (!DA.GetData(1, ref enable)) return;
+            if (!DA.GetData(1, ref nable)) return;
             if (!DA.GetData(2, ref captureColor)) return;
             if (!DA.GetData(3, ref colorExposure)) return;
             if (!DA.GetData(4, ref scannerExposure)) return;
@@ -151,7 +149,7 @@ namespace Mimikyu.Polyga
                 }
                 SBScan scan = new SBScan();
                 SBMesh mesh = new SBMesh();
-                if (enable && !isStreaming)
+                if (nable && !isStreaming)
                 {
 
                     handler = new ScanHandler(this);
@@ -182,7 +180,7 @@ namespace Mimikyu.Polyga
                     isStreaming = true;
                 }
                 
-                else if (!enable && isStreaming)
+                else if (!nable && isStreaming)
                 {
                     scanner.stopScanStream();
                     isStreaming = false;
@@ -200,16 +198,16 @@ namespace Mimikyu.Polyga
             {
                 AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Error: " + ex.Message + "\nStack: " + ex.StackTrace);
             }
-            List<GH_Point> outputPoints;
-            List<GH_Colour> outputColors;
+
+            PointCloud outputPC = new PointCloud();
             lock (lockObject)
             {
-                outputPoints = new List<GH_Point>(pointCloud);
-                outputColors = new List<GH_Colour>(colors);
+                outputPC = new PointCloud();
                 pendingUpdate = false;
             }
-            DA.SetDataList(0, outputPoints);
-            DA.SetDataList(1, outputColors);
+
+            DA.SetData(0, pc);
+
         }
         private class ScanHandler : SBScanHandler
         {
@@ -231,20 +229,19 @@ namespace Mimikyu.Polyga
                     if (vertices == null || colorsReturned == null) return;
                     if (vertices.Count == 0) return;
 
-                    var newPoints = new List<GH_Point>(vertices.Count);
-                    var newColors = new List<GH_Colour>(vertices.Count);
+                    var newPoints = new List<Point3d>(vertices.Count);
+                    var newColors = new List<Color>(vertices.Count);
+                    var newPC = new PointCloud();
 
                     int count = Math.Min(vertices.Count, colorsReturned.Count);
                     for (var i = 0; i < count; i++)
                     {
-                        newPoints.Add(new GH_Point(new Point3d(vertices[i].x, vertices[i].y, vertices[i].z)));
-                        newColors.Add(new GH_Colour(Color.FromArgb(colorsReturned[i].r, colorsReturned[i].g, colorsReturned[i].b)));
+                        newPC.Add(new Point3d(vertices[i].x, vertices[i].y, vertices[i].z), Color.FromArgb(colorsReturned[i].r, colorsReturned[i].g, colorsReturned[i].b));
                     }
 
                     lock (component.lockObject)
                     {
-                        component.pointCloud = newPoints;
-                        component.colors = newColors;
+                        component.pc = newPC;
 
                         // Skip if an update is already scheduled
                         if (component.pendingUpdate) return;

@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 
 using Grasshopper.Kernel;
+using Mimikyu.Helper;
 using Rhino.Geometry;
 
 namespace Mimikyu.Utlilities
@@ -23,6 +24,7 @@ namespace Mimikyu.Utlilities
         /// </summary>
         protected override void RegisterInputParams(GH_Component.GH_InputParamManager pManager)
         {
+            pManager.AddBooleanParameter("Trigger", "T", "Trigger to transform the scan.", GH_ParamAccess.item);
             pManager.AddGenericParameter("Scan", "S", "The scan to transform.", GH_ParamAccess.list);
             pManager.AddGenericParameter("Pose", "P", "The robot pose to use from where scan was taken.", GH_ParamAccess.list);
             pManager.AddTextParameter("FilePath", "F", "File path to use as transformation", GH_ParamAccess.item);
@@ -42,6 +44,13 @@ namespace Mimikyu.Utlilities
         /// <param name="DA">The DA object is used to retrieve from inputs and store in outputs.</param>
         protected override void SolveInstance(IGH_DataAccess DA)
         {
+            List<MimikyuObject> scans = new List<MimikyuObject>();
+            List<RobotPose> robotPose = new List<RobotPose>();
+            string filePath = null;
+
+            if (!DA.GetDataList(0, scans)) return;
+            if (!DA.GetDataList(1, robotPose)) return;
+            if (DA.GetData(2, ref filePath)) return;
         }
 
         /// <summary>

@@ -143,6 +143,7 @@ namespace Mimikyu.Utlilities
             if (item is Rectangle3d) return item;
             if (item is BoundingBox) return item;
             if (item is System.Drawing.Color) return item;
+            if (item is PointCloud) return item;
 
             // Generic cloneable objects
             if (item is ICloneable cloneable)
