@@ -12,8 +12,8 @@ namespace Mimikyu.Utlilities
         /// Initializes a new instance of the TransformScan class.
         /// </summary>
         public GH_TransformScan()
-          : base("TransformScan", "Nickname",
-              "Description",
+          : base("TransformScan", "TS",
+              "Transorm ",
               "Category", "Subcategory")
         {
         }
@@ -23,6 +23,9 @@ namespace Mimikyu.Utlilities
         /// </summary>
         protected override void RegisterInputParams(GH_Component.GH_InputParamManager pManager)
         {
+            pManager.AddGenericParameter("Scan", "S", "The scan to transform.", GH_ParamAccess.list);
+            pManager.AddGenericParameter("Pose", "P", "The robot pose to use from where scan was taken.", GH_ParamAccess.list);
+            pManager.AddTextParameter("FilePath", "F", "File path to use as transformation", GH_ParamAccess.item);
         }
 
         /// <summary>
@@ -30,6 +33,7 @@ namespace Mimikyu.Utlilities
         /// </summary>
         protected override void RegisterOutputParams(GH_Component.GH_OutputParamManager pManager)
         {
+            pManager.AddGenericParameter("TransformedScan", "T", "The transformed scan.", GH_ParamAccess.list);
         }
 
         /// <summary>

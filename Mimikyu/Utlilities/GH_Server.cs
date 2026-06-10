@@ -11,6 +11,7 @@ using System.Threading.Tasks;
 using System.Xml.Linq;
 
 using Grasshopper.Kernel;
+using Mimikyu.Helper;
 using Rhino;
 using Rhino.Geometry;
 
