@@ -1,10 +1,11 @@
-﻿using System;
+﻿using Rhino.Geometry;
+using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using System.IO;
 
 
 namespace Mimikyu.Helper
@@ -65,6 +66,37 @@ namespace Mimikyu.Helper
         public static void SaveMany(IEnumerable<RobotPose> poses, string filePath, bool includeTimestamp = false)
         {
             File.WriteAllLines(filePath, poses.Select(p => ToTextLine(p, includeTimestamp)));
+        }
+
+    }
+
+    public static class TransformHelper
+    {
+        public static Transform MultiplyTransform(Transform A, Transform B)
+        {
+            Transform C = Transform.Identity;
+
+            C.M00 = A.M00 * B.M00 + A.M01 * B.M10 + A.M02 * B.M20 + A.M03 * B.M30;
+            C.M01 = A.M00 * B.M01 + A.M01 * B.M11 + A.M02 * B.M21 + A.M03 * B.M31;
+            C.M02 = A.M00 * B.M02 + A.M01 * B.M12 + A.M02 * B.M22 + A.M03 * B.M32;
+            C.M03 = A.M00 * B.M03 + A.M01 * B.M13 + A.M02 * B.M23 + A.M03 * B.M33;
+
+            C.M10 = A.M10 * B.M00 + A.M11 * B.M10 + A.M12 * B.M20 + A.M13 * B.M30;
+            C.M11 = A.M10 * B.M01 + A.M11 * B.M11 + A.M12 * B.M21 + A.M13 * B.M31;
+            C.M12 = A.M10 * B.M02 + A.M11 * B.M12 + A.M12 * B.M22 + A.M13 * B.M32;
+            C.M13 = A.M10 * B.M03 + A.M11 * B.M13 + A.M12 * B.M23 + A.M13 * B.M33;
+
+            C.M20 = A.M20 * B.M00 + A.M21 * B.M10 + A.M22 * B.M20 + A.M23 * B.M30;
+            C.M21 = A.M20 * B.M01 + A.M21 * B.M11 + A.M22 * B.M21 + A.M23 * B.M31;
+            C.M22 = A.M20 * B.M02 + A.M21 * B.M12 + A.M22 * B.M22 + A.M23 * B.M32;
+            C.M23 = A.M20 * B.M03 + A.M21 * B.M13 + A.M22 * B.M23 + A.M23 * B.M33;
+
+            C.M30 = A.M30 * B.M00 + A.M31 * B.M10 + A.M32 * B.M20 + A.M33 * B.M30;
+            C.M31 = A.M30 * B.M01 + A.M31 * B.M11 + A.M32 * B.M21 + A.M33 * B.M31;
+            C.M32 = A.M30 * B.M02 + A.M31 * B.M12 + A.M32 * B.M22 + A.M33 * B.M32;
+            C.M33 = A.M30 * B.M03 + A.M31 * B.M13 + A.M32 * B.M23 + A.M33 * B.M33;
+
+            return C;
         }
     }
 }
