@@ -14,7 +14,7 @@ using Grasshopper.Kernel;
 using Rhino;
 using Rhino.Geometry;
 
-namespace Mimikyu.Polyga
+namespace Mimikyu.Utlilities
 {
     public class GH_Server : GH_Component
     {
