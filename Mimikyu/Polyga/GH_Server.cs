@@ -30,7 +30,7 @@ namespace Mimikyu.Polyga
         private long poseCount;
         private string latestStatus = string.Empty;
         private RobotPose lastPose;
-        private int triggerId;
+        private bool positionChanged;
 
         /// <summary>
         /// Initializes a new instance of the GH_Server class.
@@ -59,7 +59,7 @@ namespace Mimikyu.Polyga
             pManager.AddGenericParameter("Positions", "P", "Received robot poses.", GH_ParamAccess.list);
             pManager.AddIntegerParameter("PositionCount", "C", "Total received pose count.", GH_ParamAccess.item);
             pManager.AddTextParameter("Status", "S", "Latest connection/status message.", GH_ParamAccess.item);
-            pManager.AddIntegerParameter("TriggerId", "TI", "Increments whenever the pose changes beyond tolerance.", GH_ParamAccess.item);
+            pManager.AddBooleanParameter("PositionChanged", "PC", "True when the pose changes beyond tolerance.", GH_ParamAccess.item);
         }
 
         /// <summary>
@@ -85,7 +85,7 @@ namespace Mimikyu.Polyga
             DA.SetDataList(0, poses.ToArray());
             DA.SetData(1, (int)Math.Min(int.MaxValue, Interlocked.Read(ref poseCount)));
             DA.SetData(2, GetLatestStatus());
-            DA.SetData(3, GetTriggerId());
+            DA.SetData(3, GetPositionChanged());
         }
 
         public override void RemovedFromDocument(GH_Document document)
@@ -446,7 +446,7 @@ namespace Mimikyu.Polyga
                 if (lastPose == null)
                 {
                     lastPose = pose;
-                    triggerId++;
+                    positionChanged = true;
                     return;
                 }
 
@@ -456,10 +456,7 @@ namespace Mimikyu.Polyga
                 var da = Math.Abs(pose.A - lastPose.A);
                 var db = Math.Abs(pose.B - lastPose.B);
                 var dc = Math.Abs(pose.C - lastPose.C);
-                if (dx > 0.1 || dy > 0.1 || dz > 0.1 || da > 0.1 || db > 0.1 || dc > 0.1)
-                {
-                    triggerId++;
-                }
+                positionChanged = dx > 0.1 || dy > 0.1 || dz > 0.1 || da > 0.1 || db > 0.1 || dc > 0.1;
                 lastPose = pose;
             }
         }
@@ -469,15 +466,15 @@ namespace Mimikyu.Polyga
             lock (poseChangeLock)
             {
                 lastPose = null;
-                triggerId = 0;
+                positionChanged = false;
             }
         }
 
-        private int GetTriggerId()
+        private bool GetPositionChanged()
         {
             lock (poseChangeLock)
             {
-                return triggerId;
+                return positionChanged;
             }
         }
 

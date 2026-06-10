@@ -26,8 +26,6 @@ namespace Mimikyu.Polyga
         private ScanHandler handler = null;
         private bool isStreaming = false;
         private bool pendingUpdate = false;
-        private int lastEventId = -1;
-        private bool eventTriggered = false;
         List<GH_Point> pointCloud = new List<GH_Point>();
         List<GH_Colour> colors = new List<GH_Colour>();
         double maxExposure = 1000.0;
@@ -39,8 +37,8 @@ namespace Mimikyu.Polyga
         /// </summary>
         protected override void RegisterInputParams(GH_Component.GH_InputParamManager pManager)
         {
-            pManager.AddBooleanParameter("Enabled", "E", "Enable the camera", GH_ParamAccess.item, false);
-            pManager.AddIntegerParameter("EventId", "EV", "Trigger when the event id changes", GH_ParamAccess.item, 0);
+            pManager.AddBooleanParameter("Connect", "E", "Enable the camera", GH_ParamAccess.item, false);
+            pManager.AddBooleanParameter("Enable", "T", "Takes new capture if true", GH_ParamAccess.item, false);
             pManager.AddBooleanParameter("Color", "C", "Captures color if true", GH_ParamAccess.item, false);
             pManager.AddNumberParameter("Color Exposure", "CE", "Exposure of color capture", GH_ParamAccess.item, 2);
             pManager.AddNumberParameter("Scanner Exposure", "SE", "Exposure of scanner", GH_ParamAccess.item, 2);
@@ -69,8 +67,8 @@ namespace Mimikyu.Polyga
         /// <param name="DA">The DA object is used to retrieve from inputs and store in outputs.</param>
         protected override void SolveInstance(IGH_DataAccess DA)
         {
-            bool enabled = false;
-            int eventId = 0;
+            bool connect = false;
+            bool enable = false;
             bool captureColor = false;
             double colorExposure = 2000;
             double scannerExposure = 10;
@@ -79,8 +77,8 @@ namespace Mimikyu.Polyga
             double brightness = 1.0;
             double gain = 1.0;
 
-            if (!DA.GetData(0, ref enabled)) return;
-            if (!DA.GetData(1, ref eventId)) return;
+            if (!DA.GetData(0, ref connect)) return;
+            if (!DA.GetData(1, ref enable)) return;
             if (!DA.GetData(2, ref captureColor)) return;
             if (!DA.GetData(3, ref colorExposure)) return;
             if (!DA.GetData(4, ref scannerExposure)) return;
@@ -89,14 +87,13 @@ namespace Mimikyu.Polyga
             if (!DA.GetData(7, ref brightness)) return;
             if (!DA.GetData(8, ref gain)) return;
 
-            if (!enabled)
+            if (!connect)
             {
                 if (isStreaming)
                 {
                     try { scanner.stopScanStream(); } catch { }
                     isStreaming = false;
                 }
-                eventTriggered = false;
                 if (scanner != null)
                 {
                     try
@@ -109,12 +106,6 @@ namespace Mimikyu.Polyga
                     }
                 }
                 return;
-            }
-
-            if (eventId != lastEventId)
-            {
-                lastEventId = eventId;
-                eventTriggered = true;
             }
 
 
@@ -160,7 +151,7 @@ namespace Mimikyu.Polyga
                 }
                 SBScan scan = new SBScan();
                 SBMesh mesh = new SBMesh();
-                if (!isStreaming)
+                if (enable && !isStreaming)
                 {
 
                     handler = new ScanHandler(this);
@@ -189,6 +180,12 @@ namespace Mimikyu.Polyga
 
                     scanner.startScanStream(processParams, true, handler);
                     isStreaming = true;
+                }
+                
+                else if (!enable && isStreaming)
+                {
+                    scanner.stopScanStream();
+                    isStreaming = false;
                 }
             }
             catch (DllNotFoundException ex)
@@ -226,7 +223,6 @@ namespace Mimikyu.Polyga
             {
                 if (mesh == null || component == null) return;
                 if (!component.isStreaming) return;
-                if (!component.IsEventTriggered()) return;
 
                 try
                 {
@@ -264,29 +260,11 @@ namespace Mimikyu.Polyga
                             component.ExpireSolution(false);
                         });
                     }
-
-                    component.OnScanCompleted();
                 }
                 catch (Exception)
                 {
                     // Silently ignore callback errors from stale/invalid mesh data
                 }
-            }
-        }
-
-        private void OnScanCompleted()
-        {
-            lock (lockObject)
-            {
-                eventTriggered = false;
-            }
-        }
-
-        private bool IsEventTriggered()
-        {
-            lock (lockObject)
-            {
-                return eventTriggered;
             }
         }
 
