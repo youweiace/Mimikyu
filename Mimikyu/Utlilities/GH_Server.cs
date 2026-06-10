@@ -574,19 +574,4 @@ namespace Mimikyu.Utlilities
             }
         }
     }
-
-    public class RobotPose
-    {
-        public double X { get; set; }
-        public double Y { get; set; }
-        public double Z { get; set; }
-        public double A { get; set; }
-        public double B { get; set; }
-        public double C { get; set; }
-        public double E1 { get; set; }
-        public double E2 { get; set; }
-        public double E3 { get; set; }
-        public double E4 { get; set; }
-        public DateTime Timestamp { get; set; }
-    }
 }
