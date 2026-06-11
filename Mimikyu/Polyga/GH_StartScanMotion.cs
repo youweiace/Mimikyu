@@ -47,8 +47,6 @@ namespace Mimikyu.Polyga
             pManager[6].Optional = true;
             pManager.AddNumberParameter("Projector Brightness", "PB", "Brightness of the Projector", GH_ParamAccess.item, 2);
             pManager.AddNumberParameter("Camera Gain", "PG", "Gain of the Camera", GH_ParamAccess.item, 2);
-            pManager.AddIntegerParameter("Exposure Steps", "ES", "Number of exposure steps", GH_ParamAccess.item);
-            pManager.AddNumberParameter("Step Size", "SS", "Size of each exposure step", GH_ParamAccess.item);
         }
 
         /// <summary>
@@ -66,7 +64,7 @@ namespace Mimikyu.Polyga
         protected override void SolveInstance(IGH_DataAccess DA)
         {
             bool connect = false;
-            bool nable = false;
+            bool enable = false;
             bool captureColor = false;
             double colorExposure = 2000;
             double scannerExposure = 10;
@@ -76,7 +74,7 @@ namespace Mimikyu.Polyga
             double gain = 1.0;
 
             if (!DA.GetData(0, ref connect)) return;
-            if (!DA.GetData(1, ref nable)) return;
+            if (!DA.GetData(1, ref enable)) return;
             if (!DA.GetData(2, ref captureColor)) return;
             if (!DA.GetData(3, ref colorExposure)) return;
             if (!DA.GetData(4, ref scannerExposure)) return;
@@ -149,7 +147,7 @@ namespace Mimikyu.Polyga
                 }
                 SBScan scan = new SBScan();
                 SBMesh mesh = new SBMesh();
-                if (nable && !isStreaming)
+                if (enable && !isStreaming)
                 {
 
                     handler = new ScanHandler(this);
@@ -180,7 +178,7 @@ namespace Mimikyu.Polyga
                     isStreaming = true;
                 }
                 
-                else if (!nable && isStreaming)
+                else if (!enable && isStreaming)
                 {
                     scanner.stopScanStream();
                     isStreaming = false;

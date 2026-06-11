@@ -31,7 +31,7 @@ namespace Mimikyu.Utlilities
         private long poseCount;
         private string latestStatus = string.Empty;
         private RobotPose lastPose;
-        private bool positionChanged;
+        private int positionChanged;
 
         /// <summary>
         /// Initializes a new instance of the GH_Server class.
@@ -39,7 +39,7 @@ namespace Mimikyu.Utlilities
         public GH_Server()
           : base("Server", "S",
               "PC as server listening to robot actions",
-              "Mimikyu", "Subcategory")
+              "Mimikyu", "Utilites")
         {
         }
 
@@ -57,10 +57,10 @@ namespace Mimikyu.Utlilities
         /// </summary>
         protected override void RegisterOutputParams(GH_Component.GH_OutputParamManager pManager)
         {
-            pManager.AddGenericParameter("Positions", "P", "Received robot poses.", GH_ParamAccess.list);
-            pManager.AddIntegerParameter("PositionCount", "C", "Total received pose count.", GH_ParamAccess.item);
+            pManager.AddGenericParameter("Poses", "P", "Received robot poses.", GH_ParamAccess.list);
+            pManager.AddIntegerParameter("PoseCount", "C", "Total received pose count.", GH_ParamAccess.item);
             pManager.AddTextParameter("Status", "S", "Latest connection/status message.", GH_ParamAccess.item);
-            pManager.AddBooleanParameter("PositionChanged", "PC", "True when the pose changes beyond tolerance.", GH_ParamAccess.item);
+            pManager.AddIntegerParameter("EventId", "PC", "Change number when the pose changes beyond tolerance.", GH_ParamAccess.item);
         }
 
         /// <summary>
@@ -447,7 +447,7 @@ namespace Mimikyu.Utlilities
                 if (lastPose == null)
                 {
                     lastPose = pose;
-                    positionChanged = true;
+                    positionChanged ++;
                     return;
                 }
 
@@ -457,7 +457,11 @@ namespace Mimikyu.Utlilities
                 var da = Math.Abs(pose.A - lastPose.A);
                 var db = Math.Abs(pose.B - lastPose.B);
                 var dc = Math.Abs(pose.C - lastPose.C);
-                positionChanged = dx > 0.1 || dy > 0.1 || dz > 0.1 || da > 0.1 || db > 0.1 || dc > 0.1;
+                bool change = false;
+
+                if (change = dx > 0.1 || dy > 0.1 || dz > 0.1 || da > 0.1 || db > 0.1 || dc > 0.1)
+                { positionChanged++; }
+
                 lastPose = pose;
             }
         }
@@ -467,11 +471,11 @@ namespace Mimikyu.Utlilities
             lock (poseChangeLock)
             {
                 lastPose = null;
-                positionChanged = false;
+                positionChanged = 0;
             }
         }
 
-        private bool GetPositionChanged()
+        private int GetPositionChanged()
         {
             lock (poseChangeLock)
             {

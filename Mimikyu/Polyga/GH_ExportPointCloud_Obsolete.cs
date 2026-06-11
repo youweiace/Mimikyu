@@ -4,18 +4,17 @@ using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
-using System.Linq;
 using System.Text;
 
 namespace Mimikyu.Polyga
 {
-    public class GH_ExportPointCloud : GH_Component
+    public class GH_ExportPointCloud_Obsolete : GH_Component
     {
         /// <summary>
         /// Initializes a new instance of the GH_SavePointCloud class.
         /// </summary>
-        public GH_ExportPointCloud()
-          : base("ExportCloud", "E",
+        public GH_ExportPointCloud_Obsolete()
+          : base("ExportCloud_Obsolete", "E",
               "Export Point Cloud",
               "Mimikyu", "Polyga")
         {
@@ -29,11 +28,13 @@ namespace Mimikyu.Polyga
         protected override void RegisterInputParams(GH_Component.GH_InputParamManager pManager)
         {
             pManager.AddTextParameter("Dir", "D", "Directory to save to.", GH_ParamAccess.item);
-            pManager.AddTextParameter("Filename", "F", "Filename to be written.", GH_ParamAccess.list);
-            pManager.AddGenericParameter("PointCloud", "PC", "Point Cloud to save.", GH_ParamAccess.list);
+            pManager.AddTextParameter("Filename", "F", "Filename to be written.", GH_ParamAccess.item);
+            pManager.AddPointParameter("Vertices", "V", "Vertices to save.", GH_ParamAccess.list);
+            pManager.AddColourParameter("Colors", "C", "Colors of each vertex. Lengths must match.", GH_ParamAccess.list);
+            pManager[3].Optional = true;
             pManager.AddBooleanParameter("Active", "A", "Set to true to save.", GH_ParamAccess.item);
             pManager.AddBooleanParameter("ColorsAsInt", "CI", "Set to true to save colors as int.", GH_ParamAccess.item, true);
-            pManager[4].Optional = true;
+            pManager[5].Optional = true;
         }
 
         /// <summary>
@@ -51,16 +52,18 @@ namespace Mimikyu.Polyga
         protected override void SolveInstance(IGH_DataAccess DA)
         {
             string dir = "";
-            List<string> filename = new List<string>();
-            List<PointCloud> pointCloud = new List<PointCloud>();
+            string filename = "";
+            List<Point3d> vertices = new List<Point3d>();
+            List<Color> colors = new List<Color>();
             bool isActive = false;
             bool colorsAsInt = true;
 
             if (!DA.GetData(0, ref dir)) return;
-            if (!DA.GetDataList(1, filename)) return;
-            if (!DA.GetDataList(2, pointCloud)) return;
-            if (!DA.GetData(3, ref isActive)) return;
-            DA.GetData(4, ref colorsAsInt);
+            if (!DA.GetData(1, ref filename)) return;
+            if (!DA.GetDataList(2, vertices)) return;
+            bool gotColors = DA.GetDataList(3, colors);
+            if (!DA.GetData(4, ref isActive)) return;
+            DA.GetData(5, ref colorsAsInt);
 
             if (!isActive)
             {
@@ -75,19 +78,22 @@ namespace Mimikyu.Polyga
                 return;
             }
 
+            string path = Path.Combine(dir, filename);
+            bool outputColors = vertices.Count == colors.Count;
 
-            for (int i = 0; i < pointCloud.Count; i ++)
-            { 
-                try
-                {
-                    string path = Path.Combine(dir, filename[i]);
-                    WritePlyFile(path, pointCloud[i].GetPoints().ToList(), pointCloud[i].GetColors().ToList(), colorsAsInt);
-                    lastWrittenPath = path;
-                }
-                catch (Exception e)
-                {
-                    AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Error: " + e.Message);
-                }
+            if (!outputColors && gotColors)
+            {
+                AddRuntimeMessage(GH_RuntimeMessageLevel.Remark, "Length of vertices and colors mismatch. Will not output colors.");
+            }
+
+            try
+            {
+                WritePlyFile(path, vertices, colors, colorsAsInt);
+                lastWrittenPath = path;
+            }
+            catch (Exception e)
+            {
+                AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Error: " + e.Message);
             }
 
             DA.SetData(0, lastWrittenPath);
@@ -197,7 +203,7 @@ namespace Mimikyu.Polyga
         /// </summary>
         public override Guid ComponentGuid
         {
-            get { return new Guid("c60ed5ae-618c-4057-977e-ee95ca64842b"); }
+            get { return new Guid("2B03090C-D679-45DD-9DBA-308198CAAD75"); }
         }
     }
 }

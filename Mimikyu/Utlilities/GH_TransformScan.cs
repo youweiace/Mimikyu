@@ -7,6 +7,7 @@ using Rhino.Render;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using Mimikyu.Helper;
 
 namespace Mimikyu.Utlilities
 {
@@ -17,8 +18,8 @@ namespace Mimikyu.Utlilities
         /// </summary>
         public GH_TransformScan()
           : base("TransformScan", "TS",
-              "Transorm ",
-              "Category", "Subcategory")
+              "Tranfsorm scanned point clouds ",
+              "Mimikyu", "Utilities")
         {
         }
 
@@ -27,10 +28,10 @@ namespace Mimikyu.Utlilities
         /// </summary>
         protected override void RegisterInputParams(GH_Component.GH_InputParamManager pManager)
         {
-            pManager.AddBooleanParameter("Trigger", "T", "Trigger to transform the scan.", GH_ParamAccess.item);
+            pManager.AddBooleanParameter("Run", "R", "Run to transform the scan.", GH_ParamAccess.item);
             pManager.AddGenericParameter("Scan", "S", "The scan to transform.", GH_ParamAccess.list);
             pManager.AddGenericParameter("Pose", "P", "The robot pose to use from where scan was taken.", GH_ParamAccess.list);
-            pManager.AddTextParameter("FilePath", "F", "File path to use as transformation", GH_ParamAccess.item);
+            pManager.AddTextParameter("TransformPath", "TP", "File path to use as transformation", GH_ParamAccess.item);
         }
 
         /// <summary>
@@ -165,7 +166,7 @@ namespace Mimikyu.Utlilities
                 Transform T_flange_world = PoseToTransform(robotPose[i]);
                 Transform T_world = TransformHelper.MultiplyTransform(T_flange_world, CalibX);
 
-                PointCloud pc = DuplicatePointCloud(scans[i]);
+                PointCloud pc = PointCloudHelper.DuplicatePointCloud(scans[i]);
                 pc.Transform(T_world);
 
                 outScans.Add(pc);
@@ -215,23 +216,6 @@ namespace Mimikyu.Utlilities
             R.M23 = rp.Z;
 
             return R;
-        }
-
-        private PointCloud DuplicatePointCloud(PointCloud pc)
-        {
-            PointCloud copy = new PointCloud();
-            if (pc == null) return copy;
-
-            for (int i = 0; i < pc.Count; i++)
-            {
-                PointCloudItem item = pc[i];
-                if (item.Color.IsEmpty)
-                    copy.Add(item.Location);
-                else
-                    copy.Add(item.Location, item.Color);
-            }
-
-            return copy;
         }
 
     }

@@ -13,9 +13,9 @@ namespace Mimikyu.Utlilities
         /// Initializes a new instance of the SaveRobotPose class.
         /// </summary>
         public GH_SaveRobotPose()
-          : base("SaveRobotPose", "Nickname",
-              "Description",
-              "Category", "Subcategory")
+          : base("SaveRobotPose", "S",
+              "Save robot pose to local folder",
+              "Mimikyu", "Utilities")
         {
         }
 
@@ -42,13 +42,13 @@ namespace Mimikyu.Utlilities
         /// <param name="DA">The DA object is used to retrieve from inputs and store in outputs.</param>
         protected override void SolveInstance(IGH_DataAccess DA)
         {
-            List<RobotPose> robotPose = null;
+            List<RobotPose> robotPose = new List<RobotPose>();
             bool save = false;
             string filePath = null;
 
             if (!DA.GetDataList(0, robotPose)) return;
             if (!DA.GetData(1, ref save)) return;
-            if(!DA.GetData(2, ref filePath)) return;
+            if (!DA.GetData(2, ref filePath)) return;
 
             if (save)
             {

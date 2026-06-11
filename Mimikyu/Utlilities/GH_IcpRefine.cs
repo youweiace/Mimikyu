@@ -14,9 +14,9 @@ namespace Mimikyu.Utlilities
         /// Initializes a new instance of the GH_IcpRefine class.
         /// </summary>
         public GH_IcpRefine()
-          : base("ICPRefinement", "Nickname",
-              "Description",
-              "Category", "Subcategory")
+          : base("ICPRefinement", "ICP",
+              "Iterative Closest Points tweeking position",
+              "Mimikyu", "Utilities")
         {
         }
 
@@ -54,6 +54,10 @@ namespace Mimikyu.Utlilities
             int icpMaxIterations = 100;
 
             if (DA.GetDataList(0, worldScans)) return;
+            if (DA.GetData(1, ref trigger)) return;
+            if (DA.GetData(2, ref voxelSize)) return;
+            if (DA.GetData(3, ref icpMaxDistance)) return;
+            if (DA.GetData(4, ref icpMaxIterations)) return;
 
             List<PointCloud> outScans = new List<PointCloud>();
             List<Transform> outTransforms = new List<Transform>();
@@ -64,68 +68,61 @@ namespace Mimikyu.Utlilities
                 return;
             }
 
-            if (voxelSize <= 0.0) voxelSize = 0.5;
-            if (icpMaxDistance <= 0.0) icpMaxDistance = 3.0;
-            if (icpMaxIterations <= 0) icpMaxIterations = 100;
+            if (trigger)
+            { 
+                if (voxelSize <= 0.0) voxelSize = 0.5;
+                if (icpMaxDistance <= 0.0) icpMaxDistance = 3.0;
+                if (icpMaxIterations <= 0) icpMaxIterations = 100;
 
-            int n = worldScans.Count;
+                int n = worldScans.Count;
 
-            // First scan fixed
-            PointCloud first = DuplicatePointCloud(worldScans[0]);
-            outScans.Add(first);
-            outTransforms.Add(Transform.Identity);
+                // First scan fixed
+                PointCloud first = PointCloudHelper.DuplicatePointCloud(worldScans[0]);
+                outScans.Add(first);
+                outTransforms.Add(Transform.Identity);
 
-            PointCloud accumulated = DuplicatePointCloud(first);
-            PointCloud accumulatedDown = VoxelDownsample(accumulated, voxelSize);
+                PointCloud accumulated = PointCloudHelper.DuplicatePointCloud(first);
+                PointCloud accumulatedDown = PointCloudHelper.VoxelDownsample(accumulated, voxelSize);
 
 
 
-            for (int i = 1; i < n; i++)
-            {
-                PointCloud sourceFull = DuplicatePointCloud(worldScans[i]);
-                PointCloud sourceDown = VoxelDownsample(sourceFull, voxelSize);
+                for (int i = 1; i < n; i++)
+                {
+                    PointCloud sourceFull = PointCloudHelper.DuplicatePointCloud(worldScans[i]);
+                    PointCloud sourceDown = PointCloudHelper.VoxelDownsample(sourceFull, voxelSize);
 
-                ICPResult result = RunICP(
-                  sourceDown,
-                  accumulatedDown,
-                  icpMaxDistance,
-                  icpMaxIterations,
-                  1e-5
-                );
+                    ICPResult result = RunICP(
+                      sourceDown,
+                      accumulatedDown,
+                      icpMaxDistance,
+                      icpMaxIterations,
+                      1e-5
+                    );
 
-                PointCloud refined = DuplicatePointCloud(sourceFull);
-                refined.Transform(result.Transform);
+                    PointCloud refined = PointCloudHelper.DuplicatePointCloud(sourceFull);
+                    refined.Transform(result.Transform);
 
-                outScans.Add(refined);
-                outTransforms.Add(result.Transform);
+                    outScans.Add(refined);
+                    outTransforms.Add(result.Transform);
 
-                accumulated = MergeTwoClouds(accumulated, refined);
-                accumulatedDown = VoxelDownsample(accumulated, voxelSize);
+                    accumulated = PointCloudHelper.MergeTwoClouds(accumulated, refined);
+                    accumulatedDown = PointCloudHelper.VoxelDownsample(accumulated, voxelSize);
+                }
+
+                IcpValues icpValue = new IcpValues
+                {
+                    VoxelSize = voxelSize,
+                    IcpMaxDistance = icpMaxDistance,
+                    IcpMaxIterations = icpMaxIterations
+                };
+
+
+                DA.SetDataList(0, outScans);
+                DA.SetData(1, icpValue);
             }
-
-            IcpValues icpValue = new IcpValues
-            {
-                VoxelSize = voxelSize,
-                IcpMaxDistance = icpMaxDistance,
-                IcpMaxIterations = icpMaxIterations
-            };
-
-
-            DA.SetDataList(0, outScans);
-            DA.SetData(1, icpValue);
         }
 
-        public class VoxelAccum
-        {
-            public double X = 0.0;
-            public double Y = 0.0;
-            public double Z = 0.0;
-            public double R = 0.0;
-            public double G = 0.0;
-            public double B = 0.0;
-            public int Count = 0;
-            public bool HasColor = false;
-        }
+
 
         // ============================================================================
         // ICP
@@ -137,8 +134,8 @@ namespace Mimikyu.Utlilities
             if (source == null || target == null) return result;
             if (source.Count < 3 || target.Count < 3) return result;
 
-            List<Point3d> srcPts = CloudToPoints(source);
-            List<Point3d> tgtPts = CloudToPoints(target);
+            List<Point3d> srcPts = PointCloudHelper.CloudToPoints(source);
+            List<Point3d> tgtPts = PointCloudHelper.CloudToPoints(target);
 
             Transform total = Transform.Identity;
             double prevRmse = double.MaxValue;
@@ -152,7 +149,7 @@ namespace Mimikyu.Utlilities
                 for (int i = 0; i < srcPts.Count; i++)
                 {
                     Point3d p = srcPts[i];
-                    int j = ClosestPointIndexBruteForce(p, tgtPts, maxDistance);
+                    int j = PointCloudHelper.ClosestPointIndexBruteForce(p, tgtPts, maxDistance);
                     if (j >= 0)
                     {
                         Point3d q = tgtPts[j];
@@ -196,7 +193,7 @@ namespace Mimikyu.Utlilities
 
             for (int i = 0; i < srcPts.Count; i++)
             {
-                int j = ClosestPointIndexBruteForce(srcPts[i], tgtPts, maxDistance);
+                int j = PointCloudHelper.ClosestPointIndexBruteForce(srcPts[i], tgtPts, maxDistance);
                 if (j >= 0)
                 {
                     finalCount++;
@@ -210,149 +207,6 @@ namespace Mimikyu.Utlilities
             result.CorrespondenceCount = finalCount;
 
             return result;
-        }
-
-
-        // ============================================================================
-        // POINT CLOUD HELPERS
-        // ============================================================================
-        public PointCloud DuplicatePointCloud(PointCloud pc)
-        {
-            PointCloud copy = new PointCloud();
-            if (pc == null) return copy;
-
-            for (int i = 0; i < pc.Count; i++)
-            {
-                PointCloudItem item = pc[i];
-                if (item.Color.IsEmpty)
-                    copy.Add(item.Location);
-                else
-                    copy.Add(item.Location, item.Color);
-            }
-
-            return copy;
-        }
-
-        public PointCloud MergeTwoClouds(PointCloud a, PointCloud b)
-        {
-            PointCloud merged = new PointCloud();
-
-            if (a != null)
-            {
-                for (int i = 0; i < a.Count; i++)
-                {
-                    PointCloudItem item = a[i];
-                    if (item.Color.IsEmpty) merged.Add(item.Location);
-                    else merged.Add(item.Location, item.Color);
-                }
-            }
-
-            if (b != null)
-            {
-                for (int i = 0; i < b.Count; i++)
-                {
-                    PointCloudItem item = b[i];
-                    if (item.Color.IsEmpty) merged.Add(item.Location);
-                    else merged.Add(item.Location, item.Color);
-                }
-            }
-
-            return merged;
-        }
-
-        public PointCloud VoxelDownsample(PointCloud pc, double voxel)
-        {
-            if (pc == null) return new PointCloud();
-            if (pc.Count == 0) return new PointCloud();
-            if (voxel <= 0.0) return DuplicatePointCloud(pc);
-
-            Dictionary<string, VoxelAccum> cells = new Dictionary<string, VoxelAccum>();
-
-            for (int i = 0; i < pc.Count; i++)
-            {
-                PointCloudItem item = pc[i];
-                Point3d p = item.Location;
-
-                int ix = (int)Math.Floor(p.X / voxel);
-                int iy = (int)Math.Floor(p.Y / voxel);
-                int iz = (int)Math.Floor(p.Z / voxel);
-                string key = ix.ToString() + "_" + iy.ToString() + "_" + iz.ToString();
-
-                VoxelAccum acc;
-                if (!cells.TryGetValue(key, out acc))
-                {
-                    acc = new VoxelAccum();
-                    cells[key] = acc;
-                }
-
-                acc.X += p.X;
-                acc.Y += p.Y;
-                acc.Z += p.Z;
-                acc.Count++;
-
-                if (!item.Color.IsEmpty)
-                {
-                    acc.R += item.Color.R;
-                    acc.G += item.Color.G;
-                    acc.B += item.Color.B;
-                    acc.HasColor = true;
-                }
-            }
-
-            PointCloud down = new PointCloud();
-
-            foreach (KeyValuePair<string, VoxelAccum> kv in cells)
-            {
-                VoxelAccum acc = kv.Value;
-                Point3d p = new Point3d(acc.X / acc.Count, acc.Y / acc.Count, acc.Z / acc.Count);
-
-                if (acc.HasColor)
-                {
-                    int r = ClampToByte(acc.R / acc.Count);
-                    int g = ClampToByte(acc.G / acc.Count);
-                    int b = ClampToByte(acc.B / acc.Count);
-                    down.Add(p, Color.FromArgb(r, g, b));
-                }
-                else
-                {
-                    down.Add(p);
-                }
-            }
-
-            return down;
-        }
-
-        public int ClampToByte(double x)
-        {
-            if (x < 0.0) return 0;
-            if (x > 255.0) return 255;
-            return (int)Math.Round(x);
-        }
-
-        public List<Point3d> CloudToPoints(PointCloud pc)
-        {
-            List<Point3d> pts = new List<Point3d>();
-            for (int i = 0; i < pc.Count; i++)
-                pts.Add(pc[i].Location);
-            return pts;
-        }
-
-        public int ClosestPointIndexBruteForce(Point3d p, List<Point3d> pts, double maxDistance)
-        {
-            double best = maxDistance * maxDistance;
-            int bestIndex = -1;
-
-            for (int i = 0; i < pts.Count; i++)
-            {
-                double d2 = p.DistanceToSquared(pts[i]);
-                if (d2 <= best)
-                {
-                    best = d2;
-                    bestIndex = i;
-                }
-            }
-
-            return bestIndex;
         }
 
         // ============================================================================
