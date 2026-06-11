@@ -61,96 +61,98 @@ namespace Mimikyu.Utlilities
 
             if (!DA.GetData(0, ref run)) return;
             if (!DA.GetDataList(1, worldScans)) return;
-            if (!DA.GetDataList(2, icpScans)) return;
-            if (!DA.GetData(3, ref icpValues)) return;
-            if(!DA.GetData(4, ref mergeVoxel)) return;
+            DA.GetDataList(2, icpScans);
+            DA.GetData(3, ref icpValues);
+            DA.GetData(4, ref mergeVoxel);
 
             PointCloud mergedWorld = new PointCloud();
             PointCloud mergedRefined = new PointCloud();
             List<string> report = default;
 
-            double voxelSize = icpValues.VoxelSize;
-            double icpMaxDistance = icpValues.IcpMaxDistance;
-
-            if (voxelSize <= 0.0) voxelSize = 0.5;
-            if (icpMaxDistance <= 0.0) icpMaxDistance = 3.0;
-            if (mergeVoxel < 0.0) mergeVoxel = 0.0;
-
-
-            // --------------------------------------------------------------------------
-            // Merge robot-based scans
-            // --------------------------------------------------------------------------
-            if (worldScans != null && worldScans.Count > 0)
+            if (run) 
             {
-                mergedWorld = PointCloudHelper.MergeClouds(worldScans, mergeVoxel);
-            }
-            else
-            {
-                Console.WriteLine("worldScans empty.");
-            }
-                
-            // --------------------------------------------------------------------------
-            // Merge ICP-refined scans
-            // --------------------------------------------------------------------------
-            if (icpScans != null && icpValues != null && mergeVoxel != 0)
-            {
-                if (icpScans != null && icpScans.Count > 0)
+                // --------------------------------------------------------------------------
+                // Merge robot-based scans
+                // --------------------------------------------------------------------------
+                if (worldScans != null && worldScans.Count > 0)
                 {
-                    mergedRefined = PointCloudHelper.MergeClouds(icpScans, mergeVoxel);
+                    mergedWorld = PointCloudHelper.MergeCloudsVoxel(worldScans, mergeVoxel);
                 }
                 else
                 {
-                    Console.WriteLine("icpScans empty.");
+                    Console.WriteLine("worldScans empty.");
                 }
-
+                
                 // --------------------------------------------------------------------------
-                // Evaluate pairwise RMSE before / after
+                // Merge ICP-refined scans
                 // --------------------------------------------------------------------------
-                if (worldScans != null && icpScans != null && worldScans.Count > 1 && icpScans.Count > 1)
+                if (icpScans != null && icpValues != null && mergeVoxel != 0)
                 {
-                    int n = Math.Min(worldScans.Count, icpScans.Count);
+                    double voxelSize = icpValues.VoxelSize;
+                    double icpMaxDistance = icpValues.IcpMaxDistance;
 
-                    report.Add("Pairwise consecutive RMSE:");
-                    report.Add("  Pair      Before       After");
+                    if (voxelSize <= 0.0) voxelSize = 0.5;
+                    if (icpMaxDistance <= 0.0) icpMaxDistance = 3.0;
+                    if (mergeVoxel < 0.0) mergeVoxel = 0.0;
 
-                    double sumBefore = 0.0;
-                    double sumAfter = 0.0;
-                    int validCount = 0;
-
-                    for (int i = 0; i < n - 1; i++)
+                    if (icpScans != null && icpScans.Count > 0)
                     {
-                        PointCloud a0 = PointCloudHelper.VoxelDownsample(worldScans[i], voxelSize);
-                        PointCloud b0 = PointCloudHelper.VoxelDownsample(worldScans[i + 1], voxelSize);
-
-                        PointCloud a1 = PointCloudHelper.VoxelDownsample(icpScans[i], voxelSize);
-                        PointCloud b1 = PointCloudHelper.VoxelDownsample(icpScans[i + 1], voxelSize);
-
-                        double rmseBefore = PairRMSE(a0, b0, icpMaxDistance);
-                        double rmseAfter = PairRMSE(a1, b1, icpMaxDistance);
-
-                        report.Add(string.Format(
-                          "  {0}->{1}    {2,8:0.0000}    {3,8:0.0000}",
-                          i, i + 1, rmseBefore, rmseAfter));
-
-                        if (!double.IsNaN(rmseBefore) && !double.IsNaN(rmseAfter))
-                        {
-                            sumBefore += rmseBefore;
-                            sumAfter += rmseAfter;
-                            validCount++;
-                        }
+                        mergedRefined = PointCloudHelper.MergeClouds(icpScans, mergeVoxel);
+                    }
+                    else
+                    {
+                        Console.WriteLine("icpScans empty.");
                     }
 
-                    if (validCount > 0)
+                    // --------------------------------------------------------------------------
+                    // Evaluate pairwise RMSE before / after
+                    // --------------------------------------------------------------------------
+                    if (worldScans != null && icpScans != null && worldScans.Count > 1 && icpScans.Count > 1)
                     {
-                        double meanBefore = sumBefore / validCount;
-                        double meanAfter = sumAfter / validCount;
-                        double improvement = (meanBefore > 1e-12)
-                          ? ((meanBefore - meanAfter) / meanBefore * 100.0)
-                          : 0.0;
+                        int n = Math.Min(worldScans.Count, icpScans.Count);
 
-                        report.Add(string.Format("Mean before: {0:0.0000}", meanBefore));
-                        report.Add(string.Format("Mean after : {0:0.0000}", meanAfter));
-                        report.Add(string.Format("Improvement: {0:+0.0;-0.0;0.0}%", improvement));
+                        report.Add("Pairwise consecutive RMSE:");
+                        report.Add("  Pair      Before       After");
+
+                        double sumBefore = 0.0;
+                        double sumAfter = 0.0;
+                        int validCount = 0;
+
+                        for (int i = 0; i < n - 1; i++)
+                        {
+                            PointCloud a0 = PointCloudHelper.VoxelDownsample(worldScans[i], voxelSize);
+                            PointCloud b0 = PointCloudHelper.VoxelDownsample(worldScans[i + 1], voxelSize);
+
+                            PointCloud a1 = PointCloudHelper.VoxelDownsample(icpScans[i], voxelSize);
+                            PointCloud b1 = PointCloudHelper.VoxelDownsample(icpScans[i + 1], voxelSize);
+
+                            double rmseBefore = PairRMSE(a0, b0, icpMaxDistance);
+                            double rmseAfter = PairRMSE(a1, b1, icpMaxDistance);
+
+                            report.Add(string.Format(
+                              "  {0}->{1}    {2,8:0.0000}    {3,8:0.0000}",
+                              i, i + 1, rmseBefore, rmseAfter));
+
+                            if (!double.IsNaN(rmseBefore) && !double.IsNaN(rmseAfter))
+                            {
+                                sumBefore += rmseBefore;
+                                sumAfter += rmseAfter;
+                                validCount++;
+                            }
+                        }
+
+                        if (validCount > 0)
+                        {
+                            double meanBefore = sumBefore / validCount;
+                            double meanAfter = sumAfter / validCount;
+                            double improvement = (meanBefore > 1e-12)
+                              ? ((meanBefore - meanAfter) / meanBefore * 100.0)
+                              : 0.0;
+
+                            report.Add(string.Format("Mean before: {0:0.0000}", meanBefore));
+                            report.Add(string.Format("Mean after : {0:0.0000}", meanAfter));
+                            report.Add(string.Format("Improvement: {0:+0.0;-0.0;0.0}%", improvement));
+                        }
                     }
                 }
             }

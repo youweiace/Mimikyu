@@ -10,17 +10,23 @@ namespace Mimikyu.Helper
 {
     internal static class PointCloudHelper
     {
+
         public class VoxelAccum
         {
-            public double X = 0.0;
-            public double Y = 0.0;
-            public double Z = 0.0;
-            public double R = 0.0;
-            public double G = 0.0;
-            public double B = 0.0;
-            public int Count = 0;
-            public bool HasColor = false;
+            public double X;
+            public double Y;
+            public double Z;
+
+            public int Count;
+
+            public int R;
+            public int G;
+            public int B;
+
+            public int ColorCount;
+            public bool HasColor;
         }
+
         public static PointCloud DuplicatePointCloud(PointCloud pc)
         {
             PointCloud copy = new PointCloud();
@@ -153,6 +159,152 @@ namespace Mimikyu.Helper
 
             return down;
         }
+
+        public static PointCloud MergeCloudsVoxel(List<PointCloud> clouds, double voxel)
+        {
+            PointCloud result = new PointCloud();
+
+            if (clouds == null || clouds.Count == 0)
+                return result;
+
+            // If no voxel downsampling is requested, just merge normally
+            if (voxel <= 0.0)
+            {
+                for (int i = 0; i < clouds.Count; i++)
+                {
+                    PointCloud c = clouds[i];
+                    if (c == null) continue;
+
+                    for (int j = 0; j < c.Count; j++)
+                    {
+                        PointCloudItem item = c[j];
+
+                        if (item.Color.IsEmpty)
+                            result.Add(item.Location);
+                        else
+                            result.Add(item.Location, item.Color);
+                    }
+                }
+
+                return result;
+            }
+
+            Dictionary<VoxelKey, VoxelAccum> cells = new Dictionary<VoxelKey, VoxelAccum>();
+
+            double invVoxel = 1.0 / voxel;
+
+            for (int i = 0; i < clouds.Count; i++)
+            {
+                PointCloud c = clouds[i];
+                if (c == null) continue;
+
+                for (int j = 0; j < c.Count; j++)
+                {
+                    PointCloudItem item = c[j];
+                    Point3d p = item.Location;
+
+                    int ix = FastFloor(p.X * invVoxel);
+                    int iy = FastFloor(p.Y * invVoxel);
+                    int iz = FastFloor(p.Z * invVoxel);
+
+                    VoxelKey key = new VoxelKey(ix, iy, iz);
+
+                    VoxelAccum acc;
+                    if (!cells.TryGetValue(key, out acc))
+                    {
+                        acc = new VoxelAccum();
+                        cells.Add(key, acc);
+                    }
+
+                    acc.X += p.X;
+                    acc.Y += p.Y;
+                    acc.Z += p.Z;
+                    acc.Count++;
+
+                    if (!item.Color.IsEmpty)
+                    {
+                        acc.R += item.Color.R;
+                        acc.G += item.Color.G;
+                        acc.B += item.Color.B;
+                        acc.ColorCount++;
+                        acc.HasColor = true;
+                    }
+                }
+            }
+
+            foreach (KeyValuePair<VoxelKey, VoxelAccum> kv in cells)
+            {
+                VoxelAccum acc = kv.Value;
+
+                Point3d p = new Point3d(
+                    acc.X / acc.Count,
+                    acc.Y / acc.Count,
+                    acc.Z / acc.Count
+                );
+
+                if (acc.HasColor && acc.ColorCount > 0)
+                {
+                    int r = ClampToByte(acc.R / acc.ColorCount);
+                    int g = ClampToByte(acc.G / acc.ColorCount);
+                    int b = ClampToByte(acc.B / acc.ColorCount);
+
+                    result.Add(p, Color.FromArgb(r, g, b));
+                }
+                else
+                {
+                    result.Add(p);
+                }
+            }
+
+            return result;
+        }
+
+
+        public struct VoxelKey : IEquatable<VoxelKey>
+        {
+            public readonly int X;
+            public readonly int Y;
+            public readonly int Z;
+
+            public VoxelKey(int x, int y, int z)
+            {
+                X = x;
+                Y = y;
+                Z = z;
+            }
+
+            public bool Equals(VoxelKey other)
+            {
+                return X == other.X && Y == other.Y && Z == other.Z;
+            }
+
+            public override bool Equals(object obj)
+            {
+                if (!(obj is VoxelKey))
+                    return false;
+
+                return Equals((VoxelKey)obj);
+            }
+
+            public override int GetHashCode()
+            {
+                unchecked
+                {
+                    int hash = 17;
+                    hash = hash * 31 + X;
+                    hash = hash * 31 + Y;
+                    hash = hash * 31 + Z;
+                    return hash;
+                }
+            }
+        }
+
+        public static int FastFloor(double x)
+        {
+            int i = (int)x;
+            return x < i ? i - 1 : i;
+        }
+
 
         public static int ClampToByte(double x)
         {

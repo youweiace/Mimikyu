@@ -29,7 +29,7 @@ namespace Mimikyu.Utlilities
             pManager.AddBooleanParameter("Trigger", "T", "Trigger to run the ICP refinement.", GH_ParamAccess.item);
             pManager.AddNumberParameter("VoxelSize", "V", "Voxel size for downsampling (default 0.5).", GH_ParamAccess.item, 0.5);
             pManager.AddNumberParameter("ICPMaxDistance", "D", "Maximum distance for ICP correspondences (default 3.0).", GH_ParamAccess.item, 3.0);
-            pManager.AddIntegerParameter("ICPMaxIterations", "I", "Maximum iterations for ICP (default 100).", GH_ParamAccess.item, 100);
+            pManager.AddIntegerParameter("ICPMaxIterations", "I", "Maximum iterations for ICP (default 100).", GH_ParamAccess.item, 20);
         }
 
         /// <summary>
@@ -51,13 +51,13 @@ namespace Mimikyu.Utlilities
             bool trigger = false;
             double voxelSize = 0.5;
             double icpMaxDistance = 3.0;
-            int icpMaxIterations = 100;
+            int icpMaxIterations = 20;
 
-            if (DA.GetDataList(0, worldScans)) return;
-            if (DA.GetData(1, ref trigger)) return;
-            if (DA.GetData(2, ref voxelSize)) return;
-            if (DA.GetData(3, ref icpMaxDistance)) return;
-            if (DA.GetData(4, ref icpMaxIterations)) return;
+            if (!DA.GetDataList(0, worldScans)) return;
+            if (!DA.GetData(1, ref trigger)) return;
+            if (!DA.GetData(2, ref voxelSize)) return;
+            if (!DA.GetData(3, ref icpMaxDistance)) return;
+            if (!DA.GetData(4, ref icpMaxIterations)) return;
 
             List<PointCloud> outScans = new List<PointCloud>();
             List<Transform> outTransforms = new List<Transform>();
@@ -72,7 +72,7 @@ namespace Mimikyu.Utlilities
             { 
                 if (voxelSize <= 0.0) voxelSize = 0.5;
                 if (icpMaxDistance <= 0.0) icpMaxDistance = 3.0;
-                if (icpMaxIterations <= 0) icpMaxIterations = 100;
+                if (icpMaxIterations <= 0) icpMaxIterations = 20;
 
                 int n = worldScans.Count;
 
@@ -91,12 +91,12 @@ namespace Mimikyu.Utlilities
                     PointCloud sourceFull = PointCloudHelper.DuplicatePointCloud(worldScans[i]);
                     PointCloud sourceDown = PointCloudHelper.VoxelDownsample(sourceFull, voxelSize);
 
-                    ICPResult result = RunICP(
+                    ICPResult result = RunICP( 
                       sourceDown,
                       accumulatedDown,
                       icpMaxDistance,
                       icpMaxIterations,
-                      1e-5
+                      0.01
                     );
 
                     PointCloud refined = PointCloudHelper.DuplicatePointCloud(sourceFull);
