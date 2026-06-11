@@ -5,6 +5,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
 
@@ -69,6 +70,80 @@ namespace Mimikyu.Helper
         }
 
     }
+
+    internal static class RobotPoseReader
+    {
+        // Matches numbers like -123.456
+        private static readonly Regex NumberRegex = new Regex(
+            @"[-+]?\d*\.?\d+",
+            RegexOptions.Compiled
+        );
+
+        public static RobotPose FromTextLine(string line)
+        {
+            if (string.IsNullOrWhiteSpace(line))
+                throw new ArgumentException("Line is empty");
+
+            var matches = NumberRegex.Matches(line);
+
+            // We expect:
+            // 10 numbers (X,Y,Z,A,B,C,E1,E2,E3,E4)
+            // or 10 + timestamp (ignored here unless you want to parse it separately)
+            if (matches.Count < 10)
+                throw new FormatException("Invalid pose format");
+
+            double[] values = matches
+                .Cast<Match>()
+                .Take(10)
+                .Select(m => double.Parse(m.Value, CultureInfo.InvariantCulture))
+                .ToArray();
+
+            var pose = new RobotPose
+            {
+                X = values[0],
+                Y = values[1],
+                Z = values[2],
+                A = values[3],
+                B = values[4],
+                C = values[5],
+                E1 = values[6],
+                E2 = values[7],
+                E3 = values[8],
+                E4 = values[9]
+            };
+
+            // Optional: parse timestamp if present
+            if (line.Contains("Timestamp"))
+            {
+                var tsMatch = Regex.Match(line, @"Timestamp\s+([^\}]+)");
+                if (tsMatch.Success &&
+                    DateTime.TryParse(tsMatch.Groups[1].Value,
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.None,
+                    out DateTime dt))
+                {
+                    pose.Timestamp = dt;
+                }
+            }
+
+            return pose;
+        }
+
+        public static RobotPose ReadOne(string filePath)
+        {
+            var line = File.ReadAllText(filePath);
+            return FromTextLine(line);
+        }
+
+        public static List<RobotPose> ReadMany(string filePath)
+        {
+            return File.ReadAllLines(filePath)
+                       .Where(l => !string.IsNullOrWhiteSpace(l))
+                       .Select(FromTextLine)
+                       .ToList();
+        }
+    }
+
 
     public static class TransformHelper
     {
