@@ -7,13 +7,13 @@ using System.IO;
 
 namespace Mimikyu.Polyga
 {
-    public class GH_LoadPointCloud : GH_Component
+    public class GH_LoadPointCloud_Obsolete : GH_Component
     {
         /// <summary>
         /// Initializes a new instance of the GH_LoadPointCloud class.
         /// </summary>
-        public GH_LoadPointCloud()
-          : base("LoadCloud", "L",
+        public GH_LoadPointCloud_Obsolete()
+          : base("LoadCloud_Obsolete", "L",
               "Load Point Cloud",
               "Mimikyu", "Polyga")
         {
@@ -24,7 +24,7 @@ namespace Mimikyu.Polyga
         /// </summary>
         protected override void RegisterInputParams(GH_Component.GH_InputParamManager pManager)
         {
-            pManager.AddTextParameter("Path", "P", "Path to read.", GH_ParamAccess.list);
+            pManager.AddTextParameter("Path", "P", "Path to read.", GH_ParamAccess.item);
             pManager.AddBooleanParameter("Active", "A", "Set to true to load.", GH_ParamAccess.item);
         }
 
@@ -33,7 +33,8 @@ namespace Mimikyu.Polyga
         /// </summary>
         protected override void RegisterOutputParams(GH_Component.GH_OutputParamManager pManager)
         {
-            pManager.AddGenericParameter("PointCloud", "PC", "Read Point Cloud", GH_ParamAccess.list);
+            pManager.AddPointParameter("Vertices", "V", "Vertices to save.", GH_ParamAccess.list);
+            pManager.AddColourParameter("Colors", "C", "Colors of each vertex. Lengths must match.", GH_ParamAccess.list);
         }
 
         /// <summary>
@@ -42,45 +43,47 @@ namespace Mimikyu.Polyga
         /// <param name="DA">The DA object is used to retrieve from inputs and store in outputs.</param>
         protected override void SolveInstance(IGH_DataAccess DA)
         {
-            List<string> paths = new List<string>();
+            string path = "";
             bool isActive = false;
 
-            if (!DA.GetDataList(0, paths)) return;
+            if (!DA.GetData(0, ref path)) return;
             if (!DA.GetData(1, ref isActive)) return;
 
-            if (!isActive)
+
+            if (!File.Exists(path))
             {
+                AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Path does not exist.");
                 return;
             }
 
-            List<PointCloud> pointClouds = new List<PointCloud>();
-
-            for (int i = 0; i < paths.Count; i++)
-            { 
-                if (!File.Exists(paths[i]))
-                {
-                    AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Path does not exist.");
-                    return;
-                }
-
-                List<Color> colors;
-                List<Point3d> vertices;
-                PointCloud pointCloud = new PointCloud();
-                try
-                {
-                    ReadPlyFile(paths[i], out vertices, out colors);
-                    pointCloud.AddRange(vertices, colors);
-                }
-                catch (Exception e)
-                {
-                    AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Error: " + e.Message);
-                    return;
-                }
-                pointClouds.Add(pointCloud);
+            if (!isActive)
+            {
+                // if (lastError != null) {
+                //      AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Error: " + lastError.Message);
+                //  }
+                //   else
+                //  {
+                //    DA.SetDataList(0, lastReadVertices);
+                //     DA.SetDataList(1, lastReadColors);
+                //   }
+                return;
+            }
+            List<Color> colors;
+            List<Point3d> vertices;
+            try
+            {
+                ReadPlyFile(path, out vertices, out colors);
+            }
+            catch (Exception e)
+            {
+                AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Error: " + e.Message);
+                //lastError = e;
+                return;
             }
 
-            DA.SetDataList(0, pointClouds);
-
+            //lastError = null;
+            DA.SetDataList(0, vertices);
+            DA.SetDataList(1, colors);
         }
 
         private void ReadPlyFile(string path, out List<Point3d> vertices, out List<Color> colors)
@@ -189,7 +192,7 @@ namespace Mimikyu.Polyga
         /// </summary>
         public override Guid ComponentGuid
         {
-            get { return new Guid("ac9af98d-c8f4-4a91-bb5c-56fe440d2dfe"); }
+            get { return new Guid("DB9E2779-9C9A-4F33-9C7B-63C32BB5E92F"); }
         }
     }
 }

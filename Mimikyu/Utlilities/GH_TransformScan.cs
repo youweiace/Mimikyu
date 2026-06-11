@@ -57,7 +57,7 @@ namespace Mimikyu.Utlilities
             if (!DA.GetData(0, ref run)) return;
             if (!DA.GetDataList(1, scans)) return;
             if (!DA.GetDataList(2, robotPose)) return;
-            if (DA.GetData(3, ref filePath)) return;
+            if (!DA.GetData(3, ref filePath)) return;
 
 
             if (string.IsNullOrWhiteSpace(filePath))
