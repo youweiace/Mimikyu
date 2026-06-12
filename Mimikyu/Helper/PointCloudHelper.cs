@@ -1,16 +1,16 @@
 ﻿using Rhino.Geometry;
 using System;
 using System.Collections.Generic;
+using System.Drawing;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using System.Drawing;
+using static Mimikyu.Helper.PointCloudHelper;
 
 namespace Mimikyu.Helper
 {
     internal static class PointCloudHelper
     {
-
         public class VoxelAccum
         {
             public double X;
@@ -260,6 +260,7 @@ namespace Mimikyu.Helper
         }
 
 
+
         public struct VoxelKey : IEquatable<VoxelKey>
         {
             public readonly int X;
@@ -280,10 +281,7 @@ namespace Mimikyu.Helper
 
             public override bool Equals(object obj)
             {
-                if (!(obj is VoxelKey))
-                    return false;
-
-                return Equals((VoxelKey)obj);
+                return obj is VoxelKey && Equals((VoxelKey)obj);
             }
 
             public override int GetHashCode()
@@ -298,6 +296,7 @@ namespace Mimikyu.Helper
                 }
             }
         }
+
 
         public static int FastFloor(double x)
         {
@@ -338,5 +337,101 @@ namespace Mimikyu.Helper
 
             return bestIndex;
         }
+    }
+
+    public class IncrementalVoxelMerger
+    {
+        private readonly Dictionary<VoxelKey, VoxelAccum> _cells =
+            new Dictionary<VoxelKey, VoxelAccum>();
+
+        private readonly double _voxel;
+        private readonly double _invVoxel;
+
+        public IncrementalVoxelMerger(double voxel)
+        {
+            _voxel = voxel;
+            _invVoxel = 1.0 / voxel;
+        }
+
+        public int VoxelCount
+        {
+            get { return _cells.Count; }
+        }
+
+        public void Clear()
+        {
+            _cells.Clear();
+        }
+
+        public void AddCloud(PointCloud cloud)
+        {
+            if (cloud == null || cloud.Count == 0)
+                return;
+
+            for (int i = 0; i < cloud.Count; i++)
+            {
+                PointCloudItem item = cloud[i];
+                Point3d p = item.Location;
+
+                int ix = FastFloor(p.X * _invVoxel);
+                int iy = FastFloor(p.Y * _invVoxel);
+                int iz = FastFloor(p.Z * _invVoxel);
+
+                VoxelKey key = new VoxelKey(ix, iy, iz);
+
+                VoxelAccum acc;
+                if (!_cells.TryGetValue(key, out acc))
+                {
+                    acc = new VoxelAccum();
+                    _cells.Add(key, acc);
+                }
+
+                acc.X += p.X;
+                acc.Y += p.Y;
+                acc.Z += p.Z;
+                acc.Count++;
+
+                if (!item.Color.IsEmpty)
+                {
+                    acc.R += item.Color.R;
+                    acc.G += item.Color.G;
+                    acc.B += item.Color.B;
+                    acc.ColorCount++;
+                    acc.HasColor = true;
+                }
+            }
+        }
+
+        public PointCloud ToPointCloud()
+        {
+            PointCloud result = new PointCloud();
+
+            foreach (KeyValuePair<VoxelKey, VoxelAccum> kv in _cells)
+            {
+                VoxelAccum acc = kv.Value;
+
+                Point3d p = new Point3d(
+                    acc.X / acc.Count,
+                    acc.Y / acc.Count,
+                    acc.Z / acc.Count
+                );
+
+                if (acc.HasColor && acc.ColorCount > 0)
+                {
+                    int r = ClampToByte(acc.R / acc.ColorCount);
+                    int g = ClampToByte(acc.G / acc.ColorCount);
+                    int b = ClampToByte(acc.B / acc.ColorCount);
+
+                    result.Add(p, Color.FromArgb(r, g, b));
+                }
+                else
+                {
+                    result.Add(p);
+                }
+            }
+
+            return result;
+        }
+
     }
 }

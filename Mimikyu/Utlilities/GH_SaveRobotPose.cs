@@ -54,7 +54,7 @@ namespace Mimikyu.Utlilities
 
             if (save)
             {
-                RobotPoseWriter.SaveMany(robotPose, filePath, true);
+                RobotPoseWriter.SaveMany(robotPose, filePath, false);
             }
         }
 
