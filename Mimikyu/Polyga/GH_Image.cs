@@ -26,8 +26,8 @@ namespace Mimikyu.Polyga
         /// </summary>
         protected override void RegisterInputParams(GH_Component.GH_InputParamManager pManager)
         {
-            pManager.AddBooleanParameter("Enabled", "E", "Enable the calibration process", GH_ParamAccess.item);
-            pManager.AddBooleanParameter("Trigger", "T", "Trigger the calibration process", GH_ParamAccess.item);
+            pManager.AddBooleanParameter("Connect", "C", "Connect the Camera", GH_ParamAccess.item);
+            pManager.AddIntegerParameter("EventId", "T", "Trigger the camera", GH_ParamAccess.item);
             pManager.AddTextParameter("Directory", "D", "Save Directory", GH_ParamAccess.item);
             pManager.AddBooleanParameter("Reset", "R", "Reset Count", GH_ParamAccess.item);
         }
