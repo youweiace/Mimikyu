@@ -3,6 +3,7 @@ using Rhino.Geometry;
 using SBSDKNet3;
 using System;
 using System.Collections.Generic;
+using static Rhino.Render.ChangeQueue.Light;
 
 namespace Mimikyu.Polyga
 {
@@ -20,6 +21,8 @@ namespace Mimikyu.Polyga
 
         private SBScanner scanner = null;
         int filename = 0;
+        int eventId = 0;
+        int lastId = 0;
 
         /// <summary>
         /// Registers all the input parameters for this component.
@@ -27,7 +30,7 @@ namespace Mimikyu.Polyga
         protected override void RegisterInputParams(GH_Component.GH_InputParamManager pManager)
         {
             pManager.AddBooleanParameter("Connect", "C", "Connect the Camera", GH_ParamAccess.item);
-            pManager.AddIntegerParameter("EventId", "T", "Trigger the camera", GH_ParamAccess.item);
+            pManager.AddIntegerParameter("EventId", "T", "Trigger the Camera", GH_ParamAccess.item);
             pManager.AddTextParameter("Directory", "D", "Save Directory", GH_ParamAccess.item);
             pManager.AddBooleanParameter("Reset", "R", "Reset Count", GH_ParamAccess.item);
         }
@@ -46,12 +49,11 @@ namespace Mimikyu.Polyga
         protected override void SolveInstance(IGH_DataAccess DA)
         {
             bool enabled = false;
-            bool trigger = false;
             string directory = "";
             bool reset = false;
 
             if (!DA.GetData(0, ref enabled)) return;
-            if (!DA.GetData(1, ref trigger)) return;
+            if (!DA.GetData(1, ref eventId)) return;
             if (!DA.GetData(2, ref directory)) return;
             if (!DA.GetData(3, ref reset)) return;
 
@@ -106,9 +108,11 @@ namespace Mimikyu.Polyga
             if (reset)
             {
                 filename = 0;
+                eventId = 0;
+                lastId = 0;
             }
-
-            if (trigger)
+            
+            if (eventId > lastId)
             {
                 SBScan scanResult = default;
                 SBCaptureParams captureParams = new SBCaptureParams();
@@ -120,12 +124,15 @@ namespace Mimikyu.Polyga
 
                 //left camera
                 List<SBImage> leftImageList = scanResult.getCameraImages(0);
-                List<SBImage> rightImageList = scanResult.getCameraImages(1);
+                SBImage leftTexture = scanResult.getTextureImage();
+                //List<SBImage> rightImageList = scanResult.getCameraImages(1);
 
                 leftImageList[0].save($"{directory}\\{filename}.jpg");
-                rightImageList[0].save($"{directory}\\{filename}_right.jpg");
+                leftTexture.save($"{directory}\\{filename}_texture.jpg");
+                //rightImageList[0].save($"{directory}\\{filename}_right.jpg");
 
                 filename += 1;
+                lastId = eventId;
             }
         }
 
