@@ -17,13 +17,15 @@ using Rhino.Geometry;
 
 namespace Mimikyu.Utlilities
 {
-    public class GH_Server : GH_Component
+    public class GH_SendRecieve : GH_Component
     {
         private const int Port = 59152;
         private readonly ConcurrentQueue<RobotPose> poses = new ConcurrentQueue<RobotPose>();
+        private readonly ConcurrentQueue<RobotPose> targets = new ConcurrentQueue<RobotPose>();
         private readonly object listenerLock = new object();
         private readonly object statusLock = new object();
         private readonly object poseChangeLock = new object();
+        private readonly object sendLock = new object();
         private CancellationTokenSource cancellationSource;
         private Task listenerTask;
         private TcpListener activeListener;
@@ -32,15 +34,18 @@ namespace Mimikyu.Utlilities
         private string latestStatus = string.Empty;
         private RobotPose lastPose;
         private int positionChanged;
+        private RobotPose lastSentTarget;
+        private int lastHandshakeCount;
 
         /// <summary>
         /// Initializes a new instance of the GH_Server class.
         /// </summary>
-        public GH_Server()
-          : base("Server", "S",
-              "PC as server listening to robot actions",
+        public GH_SendRecieve()
+          : base("SendRecieve", "SR",
+              "PC as server, sends robot positions and listening to robot actions",
               "Mimikyu", "Utilities")
         {
+            lastSentTarget = new RobotPose();
         }
 
         /// <summary>
@@ -50,6 +55,7 @@ namespace Mimikyu.Utlilities
         {
             pManager.AddBooleanParameter("Listen", "L", "Start/stop the TCP listener.", GH_ParamAccess.item, false);
             pManager.AddBooleanParameter("Reset", "R", "Clear received data.", GH_ParamAccess.item, false);
+            pManager.AddGenericParameter("Targets", "T", "Robot target poses to send.", GH_ParamAccess.list);
         }
 
         /// <summary>
@@ -61,6 +67,7 @@ namespace Mimikyu.Utlilities
             pManager.AddIntegerParameter("PoseCount", "C", "Total received pose count.", GH_ParamAccess.item);
             pManager.AddTextParameter("Status", "S", "Latest connection/status message.", GH_ParamAccess.item);
             pManager.AddIntegerParameter("EventId", "PC", "Change number when the pose changes beyond tolerance.", GH_ParamAccess.item);
+            pManager.AddGenericParameter("LastSentTarget", "LT", "Last target pose sent to the robot.", GH_ParamAccess.item);
         }
 
         /// <summary>
@@ -81,12 +88,24 @@ namespace Mimikyu.Utlilities
                 ResetData();
             }
 
+            var targetList = new List<RobotPose>();
+            DA.GetDataList(2, targetList);
+
+            foreach (var target in targetList)
+            {
+                if (target != null)
+                {
+                    targets.Enqueue(target);
+                }
+            }
+
             EnsureListenerTaskState();
             UpdateListenerState(listen);
             DA.SetDataList(0, poses.ToArray());
             DA.SetData(1, (int)Math.Min(int.MaxValue, Interlocked.Read(ref poseCount)));
             DA.SetData(2, GetLatestStatus());
             DA.SetData(3, GetPositionChanged());
+            DA.SetData(4, GetLastSentTarget());
         }
 
         public override void RemovedFromDocument(GH_Document document)
@@ -113,7 +132,7 @@ namespace Mimikyu.Utlilities
         /// </summary>
         public override Guid ComponentGuid
         {
-            get { return new Guid("99E9DE24-A9DA-4C43-AD14-A13ECAC53C1D"); }
+            get { return new Guid("168bc7bb-b5d5-43d3-9907-a212616829ff"); }
         }
 
         private void StartListener()
@@ -123,10 +142,25 @@ namespace Mimikyu.Utlilities
                 return;
             }
 
-            cancellationSource = new CancellationTokenSource();
-            listenerTask = Task.Run(() => ListenLoop(cancellationSource.Token));
-            isListening = true;
-            LogServerBanner();
+            try
+            {
+                activeListener = new TcpListener(IPAddress.Any, Port);
+                activeListener.Server.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ExclusiveAddressUse, false);
+                activeListener.Server.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
+                activeListener.Start();
+
+                cancellationSource = new CancellationTokenSource();
+                listenerTask = Task.Run(() => ListenLoop(cancellationSource.Token));
+                isListening = true;
+                LogServerBanner();
+            }
+            catch (Exception ex)
+            {
+                activeListener?.Server?.Close();
+                activeListener?.Server?.Dispose();
+                activeListener = null;
+                LogError(ex);
+            }
         }
 
         private void StopListener()
@@ -140,8 +174,10 @@ namespace Mimikyu.Utlilities
             {
                 LogMessage("[SHUTDOWN] Server stopping.");
                 cancellationSource.Cancel();
-                StopActiveListener();
-                listenerTask.Wait(TimeSpan.FromSeconds(2));
+                if (!listenerTask.Wait(TimeSpan.FromSeconds(3)))
+                {
+                    LogMessage("[WARNING] Listener task did not complete within timeout.");
+                }
             }
             catch (Exception ex)
             {
@@ -149,7 +185,27 @@ namespace Mimikyu.Utlilities
             }
             finally
             {
-                cancellationSource.Dispose();
+                try
+                {
+                    activeListener?.Stop();
+                    activeListener?.Server?.Close();
+                    activeListener?.Server?.Dispose();
+                }
+                catch (Exception ex)
+                {
+                    LogError(ex);
+                }
+
+                activeListener = null;
+
+                try
+                {
+                    cancellationSource?.Dispose();
+                }
+                catch
+                {
+                }
+
                 cancellationSource = null;
                 listenerTask = null;
                 isListening = false;
@@ -170,77 +226,56 @@ namespace Mimikyu.Utlilities
 
         private void ListenLoop(CancellationToken token)
         {
+            LogMessage("Waiting for robot connection ...");
+
             while (!token.IsCancellationRequested)
             {
-                TcpListener listener = null;
-
                 try
                 {
-                    listener = new TcpListener(IPAddress.Any, Port);
-                    listener.Server.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ExclusiveAddressUse, false);
-                    listener.Server.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
-                    listener.Start();
-                    SetActiveListener(listener);
-                    LogMessage("Waiting for robot connection ...");
-
-                    while (!token.IsCancellationRequested)
+                    if (!activeListener.Pending())
                     {
-                        if (!listener.Pending())
-                        {
-                            Thread.Sleep(50);
-                            continue;
-                        }
-
-                        var client = listener.AcceptTcpClient();
-                        var remote = client.Client.RemoteEndPoint as IPEndPoint;
-                        if (remote != null)
-                        {
-                            LogMessage($"[CONNECTED] Robot at {remote.Address}:{remote.Port}");
-                        }
-
-                        using (client)
-                        using (var stream = client.GetStream())
-                        {
-                            stream.ReadTimeout = Timeout.Infinite;
-                            stream.WriteTimeout = 2000;
-                            ReadClientStream(stream, token, remote);
-                        }
-
-                        LogMessage("Waiting for next robot connection ...");
+                        Thread.Sleep(50);
+                        continue;
                     }
+
+                    var client = activeListener.AcceptTcpClient();
+                    var remote = client.Client.RemoteEndPoint as IPEndPoint;
+                    if (remote != null)
+                    {
+                        LogMessage($"[CONNECTED] Robot at {remote.Address}:{remote.Port}");
+                    }
+
+                    using (client)
+                    using (var stream = client.GetStream())
+                    {
+                        stream.ReadTimeout = Timeout.Infinite;
+                        stream.WriteTimeout = 2000;
+                        ReadClientStream(stream, token, remote);
+                    }
+
+                    LogMessage("Waiting for next robot connection ...");
                 }
                 catch (SocketException ex)
                 {
                     if (ex.SocketErrorCode == SocketError.AccessDenied)
                     {
                         LogMessage("[ACCESS DENIED] Unable to bind to the port. Check firewall rules, port reservations, or run with elevated permissions.");
-                        cancellationSource?.Cancel();
                         return;
                     }
 
                     LogError(ex);
                 }
+                catch (OperationCanceledException)
+                {
+                    // Expected when cancellation is requested
+                    break;
+                }
                 catch (Exception ex)
                 {
                     LogError(ex);
                 }
-                finally
-                {
-                    try
-                    {
-                        listener?.Stop();
-                    }
-                    catch (Exception ex)
-                    {
-                        LogError(ex);
-                    }
-                    finally
-                    {
-                        ClearActiveListener(listener);
-                    }
-                }
 
-                Thread.Sleep(200);
+                Thread.Sleep(100);
             }
         }
 
@@ -269,10 +304,70 @@ namespace Mimikyu.Utlilities
             isListening = false;
         }
 
+        private void SendTargetWithHandshake(NetworkStream stream, CancellationToken token, ref bool firstTargetSent)
+        {
+            if (!targets.TryDequeue(out var target))
+            {
+                return;
+            }
+
+            int currentHandshake = GetPositionChanged();
+            int lastHandshake = GetLastHandshakeCount();
+
+            if (!firstTargetSent || currentHandshake > lastHandshake)
+            {
+                firstTargetSent = true;
+            }
+            else
+            {
+                targets.Enqueue(target);
+                return;
+            }
+
+            var xml = SerializeTargetToXml(target);
+            if (string.IsNullOrEmpty(xml))
+            {
+                LogMessage("[WARNING] Failed to serialize target pose to XML.");
+                targets.Enqueue(target);
+                return;
+            }
+
+            try
+            {
+                var data = Encoding.UTF8.GetBytes(xml);
+                stream.Write(data, 0, data.Length);
+                stream.Flush();
+
+                SetLastSentTarget(target);
+                SetLastHandshakeCount(currentHandshake);
+
+                LogMessage($"[SENT TARGET] X={target.X:F2}, Y={target.Y:F2}, Z={target.Z:F2}, " +
+                    $"A={target.A:F2}, B={target.B:F2}, C={target.C:F2}");
+            }
+            catch (IOException ex)
+            {
+                if (!token.IsCancellationRequested)
+                {
+                    LogError(ex);
+                }
+
+                targets.Enqueue(target);
+            }
+            catch (Exception ex)
+            {
+                LogError(ex);
+                targets.Enqueue(target);
+            }
+        }
+
         private void ReadClientStream(NetworkStream stream, CancellationToken token, IPEndPoint remote)
         {
             var buffer = new byte[4096];
             var builder = new StringBuilder();
+            bool firstTargetSent = false;
+
+            // Brief delay to allow KUKA EKI to initialize after connection
+            Thread.Sleep(500);
 
             while (!token.IsCancellationRequested && stream.CanRead)
             {
@@ -314,6 +409,8 @@ namespace Mimikyu.Utlilities
 
                 builder.Append(Encoding.UTF8.GetString(buffer, 0, bytesRead));
                 ParseBuffer(builder);
+
+                SendTargetWithHandshake(stream, token, ref firstTargetSent);
             }
         }
 
@@ -447,7 +544,7 @@ namespace Mimikyu.Utlilities
                 if (lastPose == null)
                 {
                     lastPose = pose;
-                    positionChanged ++;
+                    positionChanged++;
                     return;
                 }
 
@@ -510,6 +607,8 @@ namespace Mimikyu.Utlilities
                 try
                 {
                     activeListener?.Stop();
+                    activeListener?.Server?.Close();
+                    activeListener?.Server?.Dispose();
                 }
                 catch (Exception ex)
                 {
@@ -578,5 +677,69 @@ namespace Mimikyu.Utlilities
                 latestStatus = message ?? string.Empty;
             }
         }
+
+        private string SerializeTargetToXml(RobotPose target)
+        {
+            if (target == null)
+            {
+                return null;
+            }
+
+            try
+            {
+                var xml = new XElement("Target",
+                    new XElement("X", target.X.ToString("F4", CultureInfo.InvariantCulture)),
+                    new XElement("Y", target.Y.ToString("F4", CultureInfo.InvariantCulture)),
+                    new XElement("Z", target.Z.ToString("F4", CultureInfo.InvariantCulture)),
+                    new XElement("A", target.A.ToString("F4", CultureInfo.InvariantCulture)),
+                    new XElement("B", target.B.ToString("F4", CultureInfo.InvariantCulture)),
+                    new XElement("C", target.C.ToString("F4", CultureInfo.InvariantCulture)),
+                    new XElement("E1", target.E1.ToString("F4", CultureInfo.InvariantCulture)),
+                    new XElement("E2", target.E2.ToString("F4", CultureInfo.InvariantCulture)),
+                    new XElement("E3", target.E3.ToString("F4", CultureInfo.InvariantCulture)),
+                    new XElement("E4", target.E4.ToString("F4", CultureInfo.InvariantCulture))
+                );
+
+                return xml.ToString();
+            }
+            catch (Exception ex)
+            {
+                LogError(ex);
+                return null;
+            }
+        }
+
+        private RobotPose GetLastSentTarget()
+        {
+            lock (sendLock)
+            {
+                return lastSentTarget;
+            }
+        }
+
+        private void SetLastSentTarget(RobotPose target)
+        {
+            lock (sendLock)
+            {
+                lastSentTarget = target;
+            }
+        }
+
+        private int GetLastHandshakeCount()
+        {
+            lock (sendLock)
+            {
+                return lastHandshakeCount;
+            }
+        }
+
+        private void SetLastHandshakeCount(int count)
+        {
+            lock (sendLock)
+            {
+                lastHandshakeCount = count;
+            }
+        }
     }
 }
+
