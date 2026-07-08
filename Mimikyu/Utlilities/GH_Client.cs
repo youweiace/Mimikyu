@@ -38,6 +38,7 @@ namespace Mimikyu.Utlilities
         private int positionChanged;
         private RobotPose lastSentTarget;
         private int lastHandshakeCount;
+        private bool previousRun;
 
         /// <summary>
         /// Initializes a new instance of the GH_Server class.
@@ -57,6 +58,7 @@ namespace Mimikyu.Utlilities
         {
             pManager.AddBooleanParameter("Listen", "L", "Start/stop the TCP listener.", GH_ParamAccess.item, false);
             pManager.AddBooleanParameter("Reset", "R", "Clear received data.", GH_ParamAccess.item, false);
+            pManager.AddBooleanParameter("Run", "Run", "On rising edge, enqueue the target list once.", GH_ParamAccess.item, false);
             pManager.AddGenericParameter("Targets", "T", "Robot target poses to send.", GH_ParamAccess.list);
         }
 
@@ -90,16 +92,34 @@ namespace Mimikyu.Utlilities
                 ResetData();
             }
 
-            var targetList = new List<RobotPose>();
-            DA.GetDataList(2, targetList);
 
-            foreach (var target in targetList)
+            bool run = false;
+            DA.GetData(2, ref run);
+
+            var targetList = new List<RobotPose>();
+            DA.GetDataList(3, targetList);
+
+            // Rising edge: false -> true
+            bool runRisingEdge = run && !previousRun;
+            previousRun = run;
+
+            if (runRisingEdge)
             {
-                if (target != null)
+                ClearTargetQueue();
+
+                foreach (var target in targetList)
                 {
-                    targets.Enqueue(target);
+                    if (target != null)
+                    {
+                        targets.Enqueue(target);
+                    }
                 }
+
+                SetLastHandshakeCount(-1);
+
+                LogMessage($"[RUN] Enqueued {targetList.Count} target poses once.");
             }
+
 
             EnsureListenerTaskState();
             UpdateListenerState(listen);
@@ -315,12 +335,24 @@ namespace Mimikyu.Utlilities
             isConnected = false;
         }
 
-        private void SendTargetWithHandshake(NetworkStream stream, CancellationToken token, ref bool firstTargetSent)
+        private void SendTargetWithHandshake(NetworkStream stream, CancellationToken token, ref bool firstTargetSent, ref bool stopCommandSent)
         {
+
             if (!targets.TryDequeue(out var target))
             {
+                if (firstTargetSent && !stopCommandSent)
+                {
+                    SendStopCommand(stream, token);
+                    stopCommandSent = true;
+                }
+                else if (!firstTargetSent)
+                {
+                    LogMessage("[WAITING] Connected, but no target is queued yet.");
+                }
+
                 return;
             }
+
 
             int currentHandshake = GetPositionChanged();
             int lastHandshake = GetLastHandshakeCount();
@@ -376,12 +408,13 @@ namespace Mimikyu.Utlilities
             var buffer = new byte[4096];
             var builder = new StringBuilder();
             bool firstTargetSent = false;
+            bool stopCommandSent = false;
 
             // Brief delay to allow KUKA EKI to initialize after connection
             Thread.Sleep(500);
 
             // CRITICAL: send first target before waiting for FLANGE
-            SendTargetWithHandshake(stream, token, ref firstTargetSent);
+            SendTargetWithHandshake(stream, token, ref firstTargetSent, ref stopCommandSent);
 
             while (!token.IsCancellationRequested && stream.CanRead)
             {
@@ -414,7 +447,7 @@ namespace Mimikyu.Utlilities
                 ParseBuffer(builder);
 
                 // Send next target after receiving FLANGE
-                SendTargetWithHandshake(stream, token, ref firstTargetSent);
+                SendTargetWithHandshake(stream, token, ref firstTargetSent, ref stopCommandSent);
             }
         }
 
@@ -658,6 +691,7 @@ namespace Mimikyu.Utlilities
             try
             {
                 var xml = new XElement("Target",
+                    new XElement("Command", "0"),
                     new XElement("X", target.X.ToString("F4", CultureInfo.InvariantCulture)),
                     new XElement("Y", target.Y.ToString("F4", CultureInfo.InvariantCulture)),
                     new XElement("Z", target.Z.ToString("F4", CultureInfo.InvariantCulture)),
@@ -676,6 +710,71 @@ namespace Mimikyu.Utlilities
             {
                 LogError(ex);
                 return null;
+            }
+        }
+
+        private string SerializeStopCommandToXml()
+        {
+            try
+            {
+                var xml = new XElement("Target",
+                    new XElement("Command", "1"),
+                    new XElement("X", "0.0000"),
+                    new XElement("Y", "0.0000"),
+                    new XElement("Z", "0.0000"),
+                    new XElement("A", "0.0000"),
+                    new XElement("B", "0.0000"),
+                    new XElement("C", "0.0000"),
+                    new XElement("E1", "0.0000"),
+                    new XElement("E2", "0.0000"),
+                    new XElement("E3", "0.0000"),
+                    new XElement("E4", "0.0000")
+                );
+
+                return xml.ToString(SaveOptions.DisableFormatting);
+            }
+            catch (Exception ex)
+            {
+                LogError(ex);
+                return null;
+            }
+        }
+
+        private void SendStopCommand(NetworkStream stream, CancellationToken token)
+        {
+            var xml = SerializeStopCommandToXml();
+
+            if (string.IsNullOrEmpty(xml))
+            {
+                LogMessage("[WARNING] Failed to serialize stop command.");
+                return;
+            }
+
+            try
+            {
+                var data = Encoding.UTF8.GetBytes(xml);
+                stream.Write(data, 0, data.Length);
+                stream.Flush();
+
+                LogMessage($"[SENT STOP] {xml}");
+            }
+            catch (IOException ex)
+            {
+                if (!token.IsCancellationRequested)
+                {
+                    LogError(ex);
+                }
+            }
+            catch (Exception ex)
+            {
+                LogError(ex);
+            }
+        }
+
+        private void ClearTargetQueue()
+        {
+            while (targets.TryDequeue(out _))
+            {
             }
         }
 
