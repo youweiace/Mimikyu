@@ -352,8 +352,7 @@ namespace Mimikyu.Utlilities
                 SetLastSentTarget(target);
                 SetLastHandshakeCount(currentHandshake);
 
-                LogMessage($"[SENT TARGET] X={target.X:F2}, Y={target.Y:F2}, Z={target.Z:F2}, " +
-                    $"A={target.A:F2}, B={target.B:F2}, C={target.C:F2}");
+                LogMessage($"[SENT TARGET] {xml}");
             }
             catch (IOException ex)
             {
@@ -371,6 +370,7 @@ namespace Mimikyu.Utlilities
             }
         }
 
+
         private void ReadClientStream(NetworkStream stream, CancellationToken token)
         {
             var buffer = new byte[4096];
@@ -379,6 +379,9 @@ namespace Mimikyu.Utlilities
 
             // Brief delay to allow KUKA EKI to initialize after connection
             Thread.Sleep(500);
+
+            // CRITICAL: send first target before waiting for FLANGE
+            SendTargetWithHandshake(stream, token, ref firstTargetSent);
 
             while (!token.IsCancellationRequested && stream.CanRead)
             {
@@ -394,7 +397,6 @@ namespace Mimikyu.Utlilities
                     {
                         LogError(ex);
                     }
-
                     break;
                 }
                 catch (Exception ex)
@@ -411,9 +413,11 @@ namespace Mimikyu.Utlilities
                 builder.Append(Encoding.UTF8.GetString(buffer, 0, bytesRead));
                 ParseBuffer(builder);
 
+                // Send next target after receiving FLANGE
                 SendTargetWithHandshake(stream, token, ref firstTargetSent);
             }
         }
+
 
         private void ParseBuffer(StringBuilder builder)
         {
@@ -666,7 +670,7 @@ namespace Mimikyu.Utlilities
                     new XElement("E4", target.E4.ToString("F4", CultureInfo.InvariantCulture))
                 );
 
-                return xml.ToString();
+                return xml.ToString(SaveOptions.DisableFormatting);
             }
             catch (Exception ex)
             {
