@@ -7,7 +7,7 @@ using System.Collections.Generic;
 using System.Drawing;
 using Mimikyu.Helper;
 
-namespace Mimikyu.Utlilities
+namespace Mimikyu.Pointcloud
 {
     public class GH_MergePointCloud : GH_Component
     {
@@ -17,7 +17,7 @@ namespace Mimikyu.Utlilities
         public GH_MergePointCloud()
           : base("MergePointCloud", "MPC",
               "Merge Point cloud and compare world and iterative alignmnent",
-              "Mimikyu", "Utilities")
+              "Mimikyu", "PointCloud")
         {
         }
 

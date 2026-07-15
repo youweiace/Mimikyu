@@ -16,7 +16,7 @@ namespace Mimikyu.Utlilities
         public GH_ToRobotPose()
           : base("ToRobotPose", "TR",
               "Convert to Rhino Position to Robot Pose",
-              "Mimikyu", "Utilities")
+              "Mimikyu", "PC_Robot")
         {
         }
 

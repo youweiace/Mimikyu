@@ -4,7 +4,7 @@ using Rhino.Geometry;
 using System;
 using System.Collections.Generic;
 
-namespace Mimikyu.Utlilities
+namespace Mimikyu.Pointcloud
 {
     public class GH_GeometryRecorder : GH_Component
     {
@@ -14,7 +14,7 @@ namespace Mimikyu.Utlilities
         public GH_GeometryRecorder()
           : base("GeometryRecorder", "R",
               "A data recorder that saves geometry",
-              "Mimikyu", "Utilities")
+              "Mimikyu", "PointCloud")
         {
         }
 

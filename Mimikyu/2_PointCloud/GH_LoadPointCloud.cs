@@ -5,7 +5,7 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
 
-namespace Mimikyu.Polyga
+namespace Mimikyu.Pointcloud
 {
     public class GH_LoadPointCloud : GH_Component
     {
@@ -15,7 +15,7 @@ namespace Mimikyu.Polyga
         public GH_LoadPointCloud()
           : base("LoadCloud", "L",
               "Load Point Cloud",
-              "Mimikyu", "Polyga")
+              "Mimikyu", "PointCloud")
         {
         }
 

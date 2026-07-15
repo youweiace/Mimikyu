@@ -9,7 +9,7 @@ using System.Collections.Generic;
 using System.IO;
 using Mimikyu.Helper;
 
-namespace Mimikyu.Utlilities
+namespace Mimikyu.Pointcloud
 {
     public class GH_TransformScan : GH_Component
     {
@@ -19,7 +19,7 @@ namespace Mimikyu.Utlilities
         public GH_TransformScan()
           : base("TransformScan", "TS",
               "Tranfsorm scanned point clouds ",
-              "Mimikyu", "Utilities")
+              "Mimikyu", "PointCloud")
         {
         }
 

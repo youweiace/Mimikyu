@@ -6,7 +6,7 @@ using System.Collections.Generic;
 using System.Drawing;
 using Mimikyu.Helper;
 
-namespace Mimikyu.Utlilities
+namespace Mimikyu.Pointcloud
 {
     public class GH_IcpRefine : GH_Component
     {
@@ -16,7 +16,7 @@ namespace Mimikyu.Utlilities
         public GH_IcpRefine()
           : base("ICPRefinement", "ICP",
               "Iterative Closest Points tweeking position",
-              "Mimikyu", "Utilities")
+              "Mimikyu", "PointCloud")
         {
         }
 

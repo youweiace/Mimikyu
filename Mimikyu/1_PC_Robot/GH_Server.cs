@@ -15,7 +15,7 @@ using Mimikyu.Helper;
 using Rhino;
 using Rhino.Geometry;
 
-namespace Mimikyu.Utlilities
+namespace Mimikyu.Connection
 {
     public class GH_Server : GH_Component
     {
@@ -39,7 +39,7 @@ namespace Mimikyu.Utlilities
         public GH_Server()
           : base("Server", "S",
               "PC as server listening to robot actions",
-              "Mimikyu", "Utilities")
+              "Mimikyu", "PC_Robot")
         {
         }
 

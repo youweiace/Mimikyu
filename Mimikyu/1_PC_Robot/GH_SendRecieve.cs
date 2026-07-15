@@ -15,7 +15,7 @@ using Mimikyu.Helper;
 using Rhino;
 using Rhino.Geometry;
 
-namespace Mimikyu.Utlilities
+namespace Mimikyu.Connection
 {
     public class GH_SendRecieve : GH_Component
     {
@@ -43,7 +43,7 @@ namespace Mimikyu.Utlilities
         public GH_SendRecieve()
           : base("SendRecieve", "SR",
               "PC as server, sends robot positions and listening to robot actions",
-              "Mimikyu", "Utilities")
+              "Mimikyu", "PC_Robot")
         {
             lastSentTarget = new RobotPose();
         }

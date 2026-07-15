@@ -1,33 +1,33 @@
-﻿using System;
-using System.Collections.Generic;
-
-using Grasshopper.Kernel;
+﻿using Grasshopper.Kernel;
+using Grasshopper.Kernel.Types;
+using Mimikyu.Helper;
 using Rhino.Geometry;
+using System;
+using System.Collections.Generic;
+using System.Globalization;
 
 namespace Mimikyu.Utlilities
 {
-    public class GH_DataRecorder : GH_Component
+    public class GH_SaveRobotPose : GH_Component
     {
         /// <summary>
-        /// Initializes a new instance of the GH_DataRecorder class.
+        /// Initializes a new instance of the SaveRobotPose class.
         /// </summary>
-        public GH_DataRecorder()
-          : base("DataRecorder", "R",
-              "A data recorder that can be enabled and reset",
-              "Mimikyu", "Utilities")
+        public GH_SaveRobotPose()
+          : base("SaveRobotPose", "S",
+              "Save robot pose to local folder",
+              "Mimikyu", "PC_Robot")
         {
         }
-
-        List<Object> items = new List<Object>();
 
         /// <summary>
         /// Registers all the input parameters for this component.
         /// </summary>
         protected override void RegisterInputParams(GH_Component.GH_InputParamManager pManager)
         {
-            pManager.AddGenericParameter("Item", "I", "The item to record.", GH_ParamAccess.item);
-            pManager.AddBooleanParameter("Trigger", "T", "If true stores the item.", GH_ParamAccess.item, false);
-            pManager.AddBooleanParameter("Reset", "R", "Clears the storage.", GH_ParamAccess.item);
+            pManager.AddGenericParameter("RobotPose", "P", "The robot pose to save.", GH_ParamAccess.list);
+            pManager.AddBooleanParameter("Save", "S", "Trigger to save the robot pose.", GH_ParamAccess.item);
+            pManager.AddTextParameter("FilePath", "F", "The file path to save the robot pose.", GH_ParamAccess.item, "robot_poses.txt");
         }
 
         /// <summary>
@@ -35,7 +35,6 @@ namespace Mimikyu.Utlilities
         /// </summary>
         protected override void RegisterOutputParams(GH_Component.GH_OutputParamManager pManager)
         {
-            pManager.AddGenericParameter("Items", "Is", "List of items", GH_ParamAccess.list);
         }
 
         /// <summary>
@@ -44,25 +43,19 @@ namespace Mimikyu.Utlilities
         /// <param name="DA">The DA object is used to retrieve from inputs and store in outputs.</param>
         protected override void SolveInstance(IGH_DataAccess DA)
         {
-            object item = null;
-            bool record = false;
-            bool reset = false;
+            List<RobotPose> robotPose = new List<RobotPose>();
+            bool save = false;
+            string filePath = null;
 
-            if (!DA.GetData(1, ref record)) return;
-            if (!DA.GetData(2, ref reset)) return;
-            if (!DA.GetData(0, ref item)) record = false;
+            if (!DA.GetDataList(0, robotPose)) return;
+            if (!DA.GetData(1, ref save)) return;
+            if (!DA.GetData(2, ref filePath)) return;
 
-            if (reset)
+
+            if (save)
             {
-                items.Clear();
-                //items = new List<object>(); 
+                RobotPoseWriter.SaveMany(robotPose, filePath, false);
             }
-            else if (item != null && record)
-            {
-                items.Add(item);
-            }
-
-            DA.SetDataList(0, items);
         }
 
         /// <summary>
@@ -83,7 +76,8 @@ namespace Mimikyu.Utlilities
         /// </summary>
         public override Guid ComponentGuid
         {
-            get { return new Guid("8E55A476-FB07-46B4-B78A-2A96216D8DF7"); }
+            get { return new Guid("334FAECE-AB22-4335-BBED-7DF326751F12"); }
         }
+
     }
 }
