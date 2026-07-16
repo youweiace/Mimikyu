@@ -2,6 +2,7 @@
 using Grasshopper.Kernel;
 using Grasshopper.Kernel.Data;
 using Grasshopper.Kernel.Geometry.Delaunay;
+using Rhino;
 using Rhino.Geometry;
 using Rhino.Geometry.Collections;
 using Rhino.Render.ChangeQueue;
@@ -32,6 +33,13 @@ namespace Mimikyu._1_PC_Robot
         protected override void RegisterInputParams(GH_Component.GH_InputParamManager pManager)
         {
             pManager.AddBrepParameter("Object", "Obj", "Object to define scan area", GH_ParamAccess.item);
+            pManager.AddNumberParameter("Capture Width", "W", "Width of the capture area in mm", GH_ParamAccess.item, 428);
+            pManager.AddNumberParameter("Capture Height", "H", "Height of the capture area in mm", GH_ParamAccess.item, 330);
+            pManager.AddNumberParameter("Distance", "D", "Distance from the object to the camera in mm", GH_ParamAccess.item, 500);
+            pManager.AddIntegerParameter("Mode", "M", "Scanning mode\n 0: Face Scans\n 1: Oblique 2 Sides\n 2: Oblique 4 Corners", GH_ParamAccess.item);
+            pManager[1].Optional = true;
+            pManager[2].Optional = true;
+            pManager[3].Optional = true;
         }
 
         /// <summary>
@@ -50,14 +58,19 @@ namespace Mimikyu._1_PC_Robot
         protected override void SolveInstance(IGH_DataAccess DA)
         {
             Brep inGeo = default;
-            double CaptureW = 428;
-            double CaptureH = 330;
-            double Distance = 500;
+            double CaptureW = default;
+            double CaptureH = default;
+            double Distance = default;
             double Overlap = 0.10;
+            int mode = 0;
 
             DataTree<Plane> planeTree = new DataTree<Plane>();
 
             if (!DA.GetData(0, ref inGeo)) return;
+            if (!DA.GetData(1, ref CaptureW)) return;
+            if (!DA.GetData(2, ref CaptureH)) return;
+            if (!DA.GetData(3, ref Distance)) return;
+            if (!DA.GetData(4, ref mode)) return;
 
             Mesh mesh = BrepToSingleMesh(inGeo);
 
@@ -67,178 +80,382 @@ namespace Mimikyu._1_PC_Robot
             double sx = obb.X.Length;
             double sy = obb.Y.Length;
             double sz = obb.Z.Length;
-
             Point3d center = obb.Center;
 
-            Point3d frontCenter =
-                center - objectPlane.YAxis * (sy * 0.5);
-
-            Point3d backCenter =
-                center + objectPlane.YAxis * (sy * 0.5);
-
-            Point3d rightCenter =
-                center + objectPlane.XAxis * (sx * 0.5);
-
-            Point3d leftCenter =
-                center - objectPlane.XAxis * (sx * 0.5);
-
-            Point3d topCenter =
-                center + objectPlane.ZAxis * (sz * 0.5);
-
-            Point3d bottomCenter =
-                center - objectPlane.ZAxis * (sz * 0.5);
-
-            List<ScanFace> faces = new List<ScanFace>();
-
-            //--------------------------------------------------
-            // FRONT
-            //--------------------------------------------------
-
-            faces.Add(new ScanFace()
+            switch (mode)
             {
-                Center = frontCenter,
-                Normal = -objectPlane.YAxis,
-                UAxis = objectPlane.XAxis,
-                VAxis = objectPlane.ZAxis,
-                Width = sx,
-                Height = sz
-            });
+                case 0:
 
-            //--------------------------------------------------
-            // BACK
-            //--------------------------------------------------
+                    Point3d frontCenter =
+                        center - objectPlane.YAxis * (sy * 0.5);
 
-            faces.Add(new ScanFace()
-            {
-                Center = backCenter,
-                Normal = objectPlane.YAxis,
-                UAxis = -objectPlane.XAxis,
-                VAxis = objectPlane.ZAxis,
-                Width = sx,
-                Height = sz
-            });
+                    Point3d backCenter =
+                        center + objectPlane.YAxis * (sy * 0.5);
 
-            //--------------------------------------------------
-            // RIGHT
-            //--------------------------------------------------
+                    Point3d rightCenter =
+                        center + objectPlane.XAxis * (sx * 0.5);
 
-            faces.Add(new ScanFace()
-            {
-                Center = rightCenter,
-                Normal = objectPlane.XAxis,
-                UAxis = objectPlane.YAxis,
-                VAxis = objectPlane.ZAxis,
-                Width = sy,
-                Height = sz
-            });
+                    Point3d leftCenter =
+                        center - objectPlane.XAxis * (sx * 0.5);
 
-            //--------------------------------------------------
-            // LEFT
-            //--------------------------------------------------
+                    Point3d topCenter =
+                        center + objectPlane.ZAxis * (sz * 0.5);
 
-            faces.Add(new ScanFace()
-            {
-                Center = leftCenter,
-                Normal = -objectPlane.XAxis,
-                UAxis = -objectPlane.YAxis,
-                VAxis = objectPlane.ZAxis,
-                Width = sy,
-                Height = sz
-            });
+                    Point3d bottomCenter =
+                        center - objectPlane.ZAxis * (sz * 0.5);
 
-            //--------------------------------------------------
-            // TOP
-            //--------------------------------------------------
+                    List<ScanFace> faces = new List<ScanFace>();
 
-            faces.Add(new ScanFace()
-            {
-                Center = topCenter,
-                Normal = objectPlane.ZAxis,
-                UAxis = -objectPlane.XAxis,
-                VAxis = objectPlane.YAxis,
-                Width = sx,
-                Height = sy
-            });
+                    //--------------------------------------------------
+                    // FRONT
+                    //--------------------------------------------------
 
-            //--------------------------------------------------
-            // BOTTOM
-            //--------------------------------------------------
-
-            faces.Add(new ScanFace()
-            {
-                Center = bottomCenter,
-                Normal = -objectPlane.ZAxis,
-                UAxis = objectPlane.XAxis,
-                VAxis = -objectPlane.YAxis,
-                Width = sx,
-                Height = sy
-            });
-
-
-            double stepU = CaptureH * (1.0 - Overlap);
-            double stepV = CaptureW * (1.0 - Overlap);
-
-            for (int f = 0; f < faces.Count; f++)
-            {
-                ScanFace face = faces[f];
-
-                int countU = Math.Max(1,
-                    (int)Math.Ceiling(face.Width / stepU));
-
-                int countV = Math.Max(1,
-                    (int)Math.Ceiling(face.Height / stepV));
-
-                for (int row = 0; row < countV; row++)
-                {
-                    bool reverse = (row % 2 == 1);
-
-                    for (int colIter = 0; colIter < countU; colIter++)
+                    faces.Add(new ScanFace()
                     {
-                        int col = reverse
-                            ? countU - 1 - colIter
-                            : colIter;
+                        Center = frontCenter,
+                        Normal = -objectPlane.YAxis,
+                        UAxis = objectPlane.XAxis,
+                        VAxis = objectPlane.ZAxis,
+                        Width = sx,
+                        Height = sz
+                    });
 
-                        double u;
-                        double v;
+                    //--------------------------------------------------
+                    // BACK
+                    //--------------------------------------------------
 
-                        if (countU == 1)
-                            u = 0.5;
-                        else
-                            u = (double)col / (countU - 1);
+                    faces.Add(new ScanFace()
+                    {
+                        Center = backCenter,
+                        Normal = objectPlane.YAxis,
+                        UAxis = -objectPlane.XAxis,
+                        VAxis = objectPlane.ZAxis,
+                        Width = sx,
+                        Height = sz
+                    });
 
-                        if (countV == 1)
-                            v = 0.5;
-                        else
-                            v = (double)row / (countV - 1);
+                    //--------------------------------------------------
+                    // RIGHT
+                    //--------------------------------------------------
 
-                        Point3d facePoint = face.PointAt(u, v);
+                    faces.Add(new ScanFace()
+                    {
+                        Center = rightCenter,
+                        Normal = objectPlane.XAxis,
+                        UAxis = objectPlane.YAxis,
+                        VAxis = objectPlane.ZAxis,
+                        Width = sy,
+                        Height = sz
+                    });
 
-                        Point3d camOrigin =
-                            facePoint + face.Normal * Distance;
+                    //--------------------------------------------------
+                    // LEFT
+                    //--------------------------------------------------
 
-                        Vector3d zAxis = face.Normal;
-                        zAxis.Unitize();
+                    faces.Add(new ScanFace()
+                    {
+                        Center = leftCenter,
+                        Normal = -objectPlane.XAxis,
+                        UAxis = -objectPlane.YAxis,
+                        VAxis = objectPlane.ZAxis,
+                        Width = sy,
+                        Height = sz
+                    });
 
-                        Vector3d xAxis = face.UAxis;
-                        xAxis.Unitize();
+                    //--------------------------------------------------
+                    // TOP
+                    //--------------------------------------------------
 
-                        Vector3d yAxis =
-                            Vector3d.CrossProduct(zAxis, xAxis);
-                        yAxis.Unitize();
+                    faces.Add(new ScanFace()
+                    {
+                        Center = topCenter,
+                        Normal = objectPlane.ZAxis,
+                        UAxis = -objectPlane.XAxis,
+                        VAxis = objectPlane.YAxis,
+                        Width = sx,
+                        Height = sy
+                    });
 
-                        xAxis =
-                            Vector3d.CrossProduct(yAxis, zAxis);
-                        xAxis.Unitize();
+                    //--------------------------------------------------
+                    // BOTTOM
+                    //--------------------------------------------------
 
-                        Plane camPlane =
-                            new Plane(camOrigin, xAxis, yAxis);
+                    faces.Add(new ScanFace()
+                    {
+                        Center = bottomCenter,
+                        Normal = -objectPlane.ZAxis,
+                        UAxis = objectPlane.XAxis,
+                        VAxis = -objectPlane.YAxis,
+                        Width = sx,
+                        Height = sy
+                    });
 
-                        GH_Path path = new GH_Path(f);
-                        planeTree.Add(camPlane, path);
+
+                    double stepU = CaptureH * (1.0 - Overlap);
+                    double stepV = CaptureW * (1.0 - Overlap);
+
+                    for (int f = 0; f < faces.Count; f++)
+                    {
+                        ScanFace face = faces[f];
+
+                        int countU = Math.Max(1,
+                            (int)Math.Ceiling(face.Width / stepU));
+
+                        int countV = Math.Max(1,
+                            (int)Math.Ceiling(face.Height / stepV));
+
+                        for (int row = 0; row < countV; row++)
+                        {
+                            bool reverse = (row % 2 == 1);
+
+                            for (int colIter = 0; colIter < countU; colIter++)
+                            {
+                                int col = reverse
+                                    ? countU - 1 - colIter
+                                    : colIter;
+
+                                double u;
+                                double v;
+
+                                if (countU == 1)
+                                    u = 0.5;
+                                else
+                                    u = (double)col / (countU - 1);
+
+                                if (countV == 1)
+                                    v = 0.5;
+                                else
+                                    v = (double)row / (countV - 1);
+
+                                Point3d facePoint = face.PointAt(u, v);
+
+                                Point3d camOrigin =
+                                    facePoint + face.Normal * Distance;
+
+                                Vector3d zAxis = face.Normal;
+                                zAxis.Unitize();
+
+                                Vector3d xAxis = face.UAxis;
+                                xAxis.Unitize();
+
+                                Vector3d yAxis =
+                                    Vector3d.CrossProduct(zAxis, xAxis);
+                                yAxis.Unitize();
+
+                                xAxis =
+                                    Vector3d.CrossProduct(yAxis, zAxis);
+                                xAxis.Unitize();
+
+                                Plane camPlane =
+                                    new Plane(camOrigin, xAxis, yAxis);
+
+                                GH_Path path = new GH_Path(f);
+                                planeTree.Add(camPlane, path);
 
 
+                            }
+                        }
                     }
-                }
+                    break;
+
+                case 1:
+
+                    // Optional angle input later
+                    double ObliqueAngleDeg = 45.0;
+
+                    double[] sizes =
+                    {
+                        sx,
+                        sy,
+                        sz
+                    };
+
+                    Vector3d[] axes =
+                    {
+                        objectPlane.XAxis,
+                        objectPlane.YAxis,
+                        objectPlane.ZAxis
+                    };
+
+                    for (int i = 0; i < 3; i++)
+                        axes[i].Unitize();
+
+                    // ------------------------------------------------------------
+                    // 3. Find the OBB axis closest to World Z
+                    // ------------------------------------------------------------
+
+                    Vector3d worldUp = Vector3d.ZAxis;
+
+                    double[] zAlign =
+                    {
+                        Math.Abs(Vector3d.Multiply(axes[0], worldUp)),
+                        Math.Abs(Vector3d.Multiply(axes[1], worldUp)),
+                        Math.Abs(Vector3d.Multiply(axes[2], worldUp))
+                    };
+
+                    int verticalId = 0;
+
+                    if (zAlign[1] > zAlign[verticalId])
+                        verticalId = 1;
+
+                    if (zAlign[2] > zAlign[verticalId])
+                        verticalId = 2;
+
+                    // ------------------------------------------------------------
+                    // 4. Keep only the two horizontal-ish axes
+                    // ------------------------------------------------------------
+
+                    List<int> horizontalIds = new List<int>();
+
+                    for (int i = 0; i < 3; i++)
+                    {
+                        if (i != verticalId)
+                            horizontalIds.Add(i);
+                    }
+
+                    int a = horizontalIds[0];
+                    int b = horizontalIds[1];
+
+                    int longId;
+                    int sideId;
+
+                    if (sizes[a] >= sizes[b])
+                    {
+                        longId = a;
+                        sideId = b;
+                    }
+                    else
+                    {
+                        longId = b;
+                        sideId = a;
+                    }
+
+                    double length = sizes[longId];
+                    double sideWidth = sizes[sideId];
+                    double height = sizes[verticalId];
+
+                    Vector3d rawLengthAxis = axes[longId];
+                    Vector3d rawSideAxis = axes[sideId];
+
+                    // ------------------------------------------------------------
+                    // 5. Project length/side axes onto World XY
+                    //    This keeps scan directions horizontal.
+                    // ------------------------------------------------------------
+
+                    Vector3d lengthAxis = ProjectVectorToPlane(rawLengthAxis, worldUp);
+
+                    if (!lengthAxis.Unitize())
+                        lengthAxis = rawLengthAxis;
+
+                    lengthAxis.Unitize();
+
+                    Vector3d projectedSideAxis = ProjectVectorToPlane(rawSideAxis, worldUp);
+
+                    if (!projectedSideAxis.Unitize())
+                    {
+                        projectedSideAxis =
+                            Vector3d.CrossProduct(worldUp, lengthAxis);
+                        projectedSideAxis.Unitize();
+                    }
+
+                    // Make sideAxis exactly perpendicular to lengthAxis in plan view
+                    Vector3d sideAxis =
+                        Vector3d.CrossProduct(worldUp, lengthAxis);
+
+                    sideAxis.Unitize();
+
+                    // Preserve same general sign as the OBB side axis
+                    if (Vector3d.Multiply(sideAxis, projectedSideAxis) < 0)
+                        sideAxis = -sideAxis;
+
+                    // ------------------------------------------------------------
+                    // 6. Define oblique directions
+                    // ------------------------------------------------------------
+
+                    double angle = RhinoMath.ToRadians(ObliqueAngleDeg);
+
+                    Vector3d leftDir =
+                          worldUp * Math.Sin(angle)
+                        - sideAxis * Math.Cos(angle);
+
+                    Vector3d rightDir =
+                          worldUp * Math.Sin(angle)
+                        + sideAxis * Math.Cos(angle);
+
+                    leftDir.Unitize();
+                    rightDir.Unitize();
+
+                    // ------------------------------------------------------------
+                    // 7. Compute how many scan positions along the length
+                    // ------------------------------------------------------------
+
+                    double step =
+                        CaptureW * (1.0 - Overlap);
+
+                    if (step <= RhinoMath.ZeroTolerance)
+                        step = CaptureW;
+
+                    int count =
+                        Math.Max(
+                            1,
+                            (int)Math.Ceiling(length / step)
+                        );
+
+                    // ------------------------------------------------------------
+                    // 8. Compute top offset in World Z
+                    // ------------------------------------------------------------
+                    // This is better than just height / 2 because the OBB may be tilted.
+                    // It computes the half extent of the OBB in the World Z direction.
+
+                    double halfWorldZExtent =
+                        ComputeHalfExtentInDirection(axes, sizes, worldUp);
+
+                    Point3d upCenter =
+                        center + worldUp * halfWorldZExtent;
+
+                    // ------------------------------------------------------------
+                    // 9. Generate scan targets and camera planes
+                    // ------------------------------------------------------------
+
+                    GH_Path leftPath = new GH_Path(0);
+                    GH_Path rightPath = new GH_Path(1);
+
+                    for (int i = 0; i < count; i++)
+                    {
+                        double t;
+
+                        if (count == 1)
+                            t = 0.5;
+                        else
+                            t = (double)i / (count - 1);
+
+                        Point3d target =
+                            upCenter +
+                            lengthAxis * ((t - 0.5) * length);
+
+                        Plane leftPlane =
+                            CreateCameraPlane(
+                                target,
+                                leftDir,
+                                Distance,
+                                lengthAxis);
+
+                        Plane rightPlane =
+                            CreateCameraPlane(
+                                target,
+                                rightDir,
+                                Distance,
+                                lengthAxis);
+
+                        planeTree.Add(leftPlane, leftPath);
+                        planeTree.Add(rightPlane, rightPath);
+                    }
+
+
+
+                    break;
+                case 2:
+                    break;
             }
 
             DA.SetDataTree(0, planeTree);
@@ -322,6 +539,94 @@ namespace Mimikyu._1_PC_Robot
             // Return the smallest one
             return SortedBoudningBoxes[0];
         }
+        private static Vector3d ProjectVectorToPlane(
+            Vector3d v,
+            Vector3d planeNormal)
+        {
+            planeNormal.Unitize();
+
+            double d =
+                Vector3d.Multiply(v, planeNormal);
+
+            Vector3d projected =
+                v - planeNormal * d;
+
+            return projected;
+        }
+
+        private static double ComputeHalfExtentInDirection(
+            Vector3d[] axes,
+            double[] sizes,
+            Vector3d direction)
+        {
+            direction.Unitize();
+
+            double extent = 0.0;
+
+            for (int i = 0; i < 3; i++)
+            {
+                Vector3d axis = axes[i];
+                axis.Unitize();
+
+                double contribution =
+                    Math.Abs(Vector3d.Multiply(axis, direction))
+                    * sizes[i]
+                    * 0.5;
+
+                extent += contribution;
+            }
+
+            return extent;
+        }
+
+        private static Plane CreateCameraPlane(Point3d target, Vector3d direction, double distance, Vector3d preferredXAxis)
+        {
+            direction.Unitize();
+
+            Point3d camPos =
+                target + direction * distance;
+
+            // TCP/camera Z points away from object
+            Vector3d zAxis = direction;
+            zAxis.Unitize();
+
+            // Try to keep plane X axis along the scan length
+            Vector3d xAxis =
+                preferredXAxis
+                - zAxis * Vector3d.Multiply(preferredXAxis, zAxis);
+
+            if (!xAxis.Unitize())
+            {
+                xAxis =
+                    Vector3d.CrossProduct(
+                        Vector3d.ZAxis,
+                        zAxis);
+
+                if (!xAxis.Unitize())
+                    xAxis = Vector3d.XAxis;
+            }
+
+            // Ensure Plane.ZAxis = zAxis
+            Vector3d yAxis =
+                Vector3d.CrossProduct(
+                    zAxis,
+                    xAxis);
+
+            yAxis.Unitize();
+
+            xAxis =
+                Vector3d.CrossProduct(
+                    yAxis,
+                    zAxis);
+
+            xAxis.Unitize();
+
+            return new Plane(
+                camPos,
+                -xAxis,
+                -yAxis);
+        }
+
         /// <summary>
         /// Provides an Icon for the component.
         /// </summary>
