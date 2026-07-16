@@ -263,7 +263,6 @@ namespace Mimikyu._1_PC_Robot
                     // Optional angle input later
                     double ObliqueAngleDeg = 45.0;
 
-
                     // ------------------------------------------------------------
                     // OBB dimensions and axes
                     // ------------------------------------------------------------
@@ -388,7 +387,7 @@ namespace Mimikyu._1_PC_Robot
                     // Oblique directions
                     // ------------------------------------------------------------
 
-                    double angle = RhinoMath.ToRadians(45);
+                    double angle = RhinoMath.ToRadians(ObliqueAngleDeg);
 
                     Vector3d leftDir =
                           verticalAxis * Math.Sin(angle)

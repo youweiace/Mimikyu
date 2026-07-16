@@ -60,6 +60,7 @@ namespace Mimikyu.Connection
             pManager.AddBooleanParameter("Reset", "R", "Clear received data.", GH_ParamAccess.item, false);
             pManager.AddBooleanParameter("Run", "Run", "On rising edge, enqueue the target list once.", GH_ParamAccess.item, false);
             pManager.AddGenericParameter("Targets", "T", "Robot target poses to send.", GH_ParamAccess.list);
+            pManager[3].Optional = true;
         }
 
         /// <summary>
