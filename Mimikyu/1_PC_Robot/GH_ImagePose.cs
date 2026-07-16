@@ -36,7 +36,7 @@ namespace Mimikyu._1_PC_Robot
             pManager.AddNumberParameter("Capture Width", "W", "Width of the capture area in mm", GH_ParamAccess.item, 428);
             pManager.AddNumberParameter("Capture Height", "H", "Height of the capture area in mm", GH_ParamAccess.item, 330);
             pManager.AddNumberParameter("Distance", "D", "Distance from the object to the camera in mm", GH_ParamAccess.item, 500);
-            pManager.AddIntegerParameter("Mode", "M", "Scanning mode\n 0: Face Scans\n 1: Oblique 2 Sides\n 2: Oblique 4 Corners", GH_ParamAccess.item);
+            pManager.AddIntegerParameter("Mode", "M", "Scanning mode\n 0: Face Scans\n 1: Oblique 2 Sides\n 2: Oblique 4 Corners (under development)", GH_ParamAccess.item);
             pManager[1].Optional = true;
             pManager[2].Optional = true;
             pManager[3].Optional = true;
@@ -263,6 +263,11 @@ namespace Mimikyu._1_PC_Robot
                     // Optional angle input later
                     double ObliqueAngleDeg = 45.0;
 
+
+                    // ------------------------------------------------------------
+                    // OBB dimensions and axes
+                    // ------------------------------------------------------------
+
                     double[] sizes =
                     {
                         sx,
@@ -280,17 +285,16 @@ namespace Mimikyu._1_PC_Robot
                     for (int i = 0; i < 3; i++)
                         axes[i].Unitize();
 
-                    // ------------------------------------------------------------
-                    // 3. Find the OBB axis closest to World Z
-                    // ------------------------------------------------------------
 
-                    Vector3d worldUp = Vector3d.ZAxis;
+                    // ------------------------------------------------------------
+                    // Find which OBB axis is most vertical
+                    // ------------------------------------------------------------
 
                     double[] zAlign =
                     {
-                        Math.Abs(Vector3d.Multiply(axes[0], worldUp)),
-                        Math.Abs(Vector3d.Multiply(axes[1], worldUp)),
-                        Math.Abs(Vector3d.Multiply(axes[2], worldUp))
+                        Math.Abs(axes[0] * Vector3d.ZAxis),
+                        Math.Abs(axes[1] * Vector3d.ZAxis),
+                        Math.Abs(axes[2] * Vector3d.ZAxis)
                     };
 
                     int verticalId = 0;
@@ -301,120 +305,127 @@ namespace Mimikyu._1_PC_Robot
                     if (zAlign[2] > zAlign[verticalId])
                         verticalId = 2;
 
+
                     // ------------------------------------------------------------
-                    // 4. Keep only the two horizontal-ish axes
+                    // Remaining 2 axes
                     // ------------------------------------------------------------
 
-                    List<int> horizontalIds = new List<int>();
+                    List<int> remaining = new List<int>();
 
                     for (int i = 0; i < 3; i++)
                     {
                         if (i != verticalId)
-                            horizontalIds.Add(i);
+                            remaining.Add(i);
                     }
 
-                    int a = horizontalIds[0];
-                    int b = horizontalIds[1];
+                    int idA = remaining[0];
+                    int idB = remaining[1];
+
+
+                    // ------------------------------------------------------------
+                    // Longest horizontal axis = scan direction
+                    // Other horizontal axis = side direction
+                    // ------------------------------------------------------------
 
                     int longId;
                     int sideId;
 
-                    if (sizes[a] >= sizes[b])
+                    if (sizes[idA] >= sizes[idB])
                     {
-                        longId = a;
-                        sideId = b;
+                        longId = idA;
+                        sideId = idB;
                     }
                     else
                     {
-                        longId = b;
-                        sideId = a;
+                        longId = idB;
+                        sideId = idA;
                     }
 
+
+                    // ------------------------------------------------------------
+                    // Final object-aligned frame
+                    // ------------------------------------------------------------
+
+                    Vector3d lengthAxis = axes[longId];
+                    Vector3d sideAxis = axes[sideId];
+                    Vector3d verticalAxis = axes[verticalId];
+
+                    lengthAxis.Unitize();
+                    sideAxis.Unitize();
+                    verticalAxis.Unitize();
+
+
+                    // Flip object Z upward if needed
+                    if (verticalAxis * Vector3d.ZAxis < 0)
+                    {
+                        verticalAxis = -verticalAxis;
+                    }
+
+
+                    // Rebuild frame orthogonally
+                    sideAxis = Vector3d.CrossProduct(verticalAxis, lengthAxis);
+                    sideAxis.Unitize();
+
+                    lengthAxis = Vector3d.CrossProduct(sideAxis, verticalAxis);
+                    lengthAxis.Unitize();
+
+
+                    // Keep directions consistent
+                    if (lengthAxis * axes[longId] < 0)
+                        lengthAxis = -lengthAxis;
+
+                    if (sideAxis * axes[sideId] < 0)
+                        sideAxis = -sideAxis;
+
+
+                    // Dimensions
                     double length = sizes[longId];
                     double sideWidth = sizes[sideId];
                     double height = sizes[verticalId];
 
-                    Vector3d rawLengthAxis = axes[longId];
-                    Vector3d rawSideAxis = axes[sideId];
 
                     // ------------------------------------------------------------
-                    // 5. Project length/side axes onto World XY
-                    //    This keeps scan directions horizontal.
+                    // Oblique directions
                     // ------------------------------------------------------------
 
-                    Vector3d lengthAxis = ProjectVectorToPlane(rawLengthAxis, worldUp);
-
-                    if (!lengthAxis.Unitize())
-                        lengthAxis = rawLengthAxis;
-
-                    lengthAxis.Unitize();
-
-                    Vector3d projectedSideAxis = ProjectVectorToPlane(rawSideAxis, worldUp);
-
-                    if (!projectedSideAxis.Unitize())
-                    {
-                        projectedSideAxis =
-                            Vector3d.CrossProduct(worldUp, lengthAxis);
-                        projectedSideAxis.Unitize();
-                    }
-
-                    // Make sideAxis exactly perpendicular to lengthAxis in plan view
-                    Vector3d sideAxis =
-                        Vector3d.CrossProduct(worldUp, lengthAxis);
-
-                    sideAxis.Unitize();
-
-                    // Preserve same general sign as the OBB side axis
-                    if (Vector3d.Multiply(sideAxis, projectedSideAxis) < 0)
-                        sideAxis = -sideAxis;
-
-                    // ------------------------------------------------------------
-                    // 6. Define oblique directions
-                    // ------------------------------------------------------------
-
-                    double angle = RhinoMath.ToRadians(ObliqueAngleDeg);
+                    double angle = RhinoMath.ToRadians(45);
 
                     Vector3d leftDir =
-                          worldUp * Math.Sin(angle)
+                          verticalAxis * Math.Sin(angle)
                         - sideAxis * Math.Cos(angle);
 
                     Vector3d rightDir =
-                          worldUp * Math.Sin(angle)
+                          verticalAxis * Math.Sin(angle)
                         + sideAxis * Math.Cos(angle);
 
                     leftDir.Unitize();
                     rightDir.Unitize();
 
                     // ------------------------------------------------------------
-                    // 7. Compute how many scan positions along the length
+                    // Number of positions along object length
                     // ------------------------------------------------------------
 
                     double step =
                         CaptureW * (1.0 - Overlap);
 
-                    if (step <= RhinoMath.ZeroTolerance)
-                        step = CaptureW;
-
                     int count =
                         Math.Max(
                             1,
-                            (int)Math.Ceiling(length / step)
-                        );
+                            (int)Math.Ceiling(length / step));
+
 
                     // ------------------------------------------------------------
-                    // 8. Compute top offset in World Z
+                    // Top scan line
                     // ------------------------------------------------------------
-                    // This is better than just height / 2 because the OBB may be tilted.
-                    // It computes the half extent of the OBB in the World Z direction.
-
-                    double halfWorldZExtent =
-                        ComputeHalfExtentInDirection(axes, sizes, worldUp);
 
                     Point3d upCenter =
-                        center + worldUp * halfWorldZExtent;
+                        center +
+                        verticalAxis * (height * 0.5);
+
+
 
                     // ------------------------------------------------------------
-                    // 9. Generate scan targets and camera planes
+                    // Generate scan targets and camera planes
                     // ------------------------------------------------------------
 
                     GH_Path leftPath = new GH_Path(0);
@@ -503,7 +514,7 @@ namespace Mimikyu._1_PC_Robot
             return joined;
         }
 
-        public static Box GetMinimumBoundingBox3D(Rhino.Geometry.Mesh inputMesh)
+        public static Box GetMinimumBoundingBox3D(Mesh inputMesh)
         {
 
             // Note: The inputMesh is already a convex hull
@@ -534,49 +545,10 @@ namespace Mimikyu._1_PC_Robot
             }
 
             // Sort the bounding boxes by volume
-            List<Box> SortedBoudningBoxes = orientedBoxes.OrderBy(o => o.Volume).ToList();
+            List<Box> SortedBoundingBoxes = orientedBoxes.OrderBy(o => o.Volume).ToList();
 
             // Return the smallest one
-            return SortedBoudningBoxes[0];
-        }
-        private static Vector3d ProjectVectorToPlane(
-            Vector3d v,
-            Vector3d planeNormal)
-        {
-            planeNormal.Unitize();
-
-            double d =
-                Vector3d.Multiply(v, planeNormal);
-
-            Vector3d projected =
-                v - planeNormal * d;
-
-            return projected;
-        }
-
-        private static double ComputeHalfExtentInDirection(
-            Vector3d[] axes,
-            double[] sizes,
-            Vector3d direction)
-        {
-            direction.Unitize();
-
-            double extent = 0.0;
-
-            for (int i = 0; i < 3; i++)
-            {
-                Vector3d axis = axes[i];
-                axis.Unitize();
-
-                double contribution =
-                    Math.Abs(Vector3d.Multiply(axis, direction))
-                    * sizes[i]
-                    * 0.5;
-
-                extent += contribution;
-            }
-
-            return extent;
+            return SortedBoundingBoxes[0];
         }
 
         private static Plane CreateCameraPlane(Point3d target, Vector3d direction, double distance, Vector3d preferredXAxis)
