@@ -8,7 +8,7 @@ using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.IO;
 using Newtonsoft.Json;
-
+using Rhino.Geometry.Intersect;
 
 namespace Mimikyu.Helper
 {
@@ -21,15 +21,18 @@ namespace Mimikyu.Helper
 
         public class CameraIntrinsics
         {
+            public int image_width { get; set; }
+            public int image_height { get; set; }
+
+            public CameraMatrix camera_matrix { get; set; }
+        }
+
+        public class CameraMatrix
+        {
             public double fx { get; set; }
             public double fy { get; set; }
             public double cx { get; set; }
             public double cy { get; set; }
-
-            public int image_width { get; set; }
-            public int image_height { get; set; }
-
-            public List<double> distortion_coefficients { get; set; }
         }
 
         public class CameraToRobotJson
@@ -65,6 +68,29 @@ namespace Mimikyu.Helper
             public double A;
             public double B;
             public double C;
+        }
+
+        public class DefectContainer
+        {
+            public List<Defect> defects { get; set; }
+        }
+
+        public class Defect
+        {
+            public int id { get; set; }
+
+            public double area_pixels { get; set; }
+
+            public List<List<double>> contour { get; set; }
+        }
+        public class PixelObjectHit
+        {
+            public Point3d Pixel { get; set; }
+            public Point3d Point { get; set; }
+            public int FaceIndex { get; set; }
+            public Vector3d FaceNormal { get; set; }
+            public double Distance { get; set; }
+            public string SideKey { get; set; }
         }
 
         // =====================================================
@@ -148,13 +174,238 @@ namespace Mimikyu.Helper
                         targetPlane
                     );
 
+
                 if (hit.HasValue)
                 {
-                    projectedPoints.Add(hit.Value);
+                    Point3d p = hit.Value;
+
+                    bool valid =
+                        p.IsValid &&
+                        !double.IsNaN(p.X) &&
+                        !double.IsNaN(p.Y) &&
+                        !double.IsNaN(p.Z) &&
+                        !double.IsInfinity(p.X) &&
+                        !double.IsInfinity(p.Y) &&
+                        !double.IsInfinity(p.Z);
+
+                    if (valid)
+                    {
+                        projectedPoints.Add(p);
+                    }
+                    else
+                    {
+                        System.Diagnostics.Debug.WriteLine(
+                            $"Invalid projected point: X={p.X}, Y={p.Y}, Z={p.Z}"
+                        );
+                    }
                 }
+                else
+                {
+                    System.Diagnostics.Debug.WriteLine(
+                        $"No plane intersection for pixel: u={pixel.X}, v={pixel.Y}"
+                    );
+                }
+
             }
 
             return projectedPoints;
+        }
+
+        public static List<PixelObjectHit> ProjectPixelsToObjectMesh(
+            string intrinsicsJsonPath,
+            string cameraToRobotJsonPath,
+            string poseTxtPath,
+            int poseIndex,
+            List<Point3d> imagePixels,
+            Mesh objectMesh,
+            Plane objectPlane,
+            double maxDistance = 5000.0
+        )
+        {
+            CameraIntrinsics K =
+                LoadIntrinsics(intrinsicsJsonPath);
+
+            double[,] T_tcp_camera =
+                LoadCameraToRobot(cameraToRobotJsonPath);
+
+            List<KukaPose> poses =
+                LoadPoses(poseTxtPath);
+
+            if (poseIndex < 0 || poseIndex >= poses.Count)
+            {
+                throw new Exception(
+                    $"poseIndex {poseIndex} is invalid. Pose file contains {poses.Count} poses."
+                );
+            }
+
+            if (objectMesh == null || !objectMesh.IsValid)
+            {
+                throw new Exception("Object mesh is null or invalid.");
+            }
+
+            objectMesh.FaceNormals.ComputeFaceNormals();
+            objectMesh.Normals.ComputeNormals();
+
+            KukaPose pose =
+                poses[poseIndex];
+
+            double[,] T_base_tcp =
+                KukaPoseToTransform(pose);
+
+            double[,] T_base_camera =
+                Multiply4x4(
+                    T_base_tcp,
+                    T_tcp_camera
+                );
+
+            Point3d cameraOrigin =
+                new Point3d(
+                    T_base_camera[0, 3],
+                    T_base_camera[1, 3],
+                    T_base_camera[2, 3]
+                );
+
+            double[,] R_base_camera =
+                ExtractRotation(T_base_camera);
+
+            List<PixelObjectHit> hits =
+                new List<PixelObjectHit>();
+
+            foreach (Point3d pixel in imagePixels)
+            {
+                double u = pixel.X;
+                double v = pixel.Y;
+
+                Vector3d rayCamera =
+                    PixelToRay(
+                        u,
+                        v,
+                        K
+                    );
+
+                Vector3d rayBase =
+                    Multiply3x3Vector(
+                        R_base_camera,
+                        rayCamera
+                    );
+
+                if (!rayBase.Unitize())
+                {
+                    continue;
+                }
+
+                Ray3d ray =
+                    new Ray3d(
+                        cameraOrigin,
+                        rayBase
+                    );
+
+                int[] faceIds;
+                double t =
+                    Intersection.MeshRay(
+                        objectMesh,
+                        ray,
+                        out faceIds
+                    );
+
+                if (t < 0)
+                {
+                    continue;
+                }
+
+                if (t > maxDistance)
+                {
+                    continue;
+                }
+
+                Point3d hitPoint =
+                    ray.PointAt(t);
+
+                if (!hitPoint.IsValid)
+                {
+                    continue;
+                }
+
+                int faceIndex =
+                    -1;
+
+                if (faceIds != null && faceIds.Length > 0)
+                {
+                    faceIndex = faceIds[0];
+                }
+
+                Vector3d normal =
+                    Vector3d.Unset;
+
+                if (faceIndex >= 0 && faceIndex < objectMesh.FaceNormals.Count)
+                {
+                    normal =
+                        objectMesh.FaceNormals[faceIndex];
+
+                    normal.Unitize();
+                }
+
+                string sideKey =
+                    ClassifyNormalToObjectSide(
+                        normal,
+                        objectPlane
+                    );
+
+                hits.Add(
+                    new PixelObjectHit
+                    {
+                        Pixel = pixel,
+                        Point = hitPoint,
+                        FaceIndex = faceIndex,
+                        FaceNormal = normal,
+                        Distance = t,
+                        SideKey = sideKey
+                    }
+                );
+            }
+
+            return hits;
+        }
+
+        private static string ClassifyNormalToObjectSide(
+            Vector3d normal,
+            Plane objectPlane
+        )
+        {
+            if (!normal.IsValid || normal.IsTiny())
+            {
+                return "Unknown";
+            }
+
+            normal.Unitize();
+
+            Vector3d x = objectPlane.XAxis;
+            Vector3d y = objectPlane.YAxis;
+            Vector3d z = objectPlane.ZAxis;
+
+            x.Unitize();
+            y.Unitize();
+            z.Unitize();
+
+            double dx = Vector3d.Multiply(normal, x);
+            double dy = Vector3d.Multiply(normal, y);
+            double dz = Vector3d.Multiply(normal, z);
+
+            double ax = Math.Abs(dx);
+            double ay = Math.Abs(dy);
+            double az = Math.Abs(dz);
+
+            if (ax >= ay && ax >= az)
+            {
+                return dx >= 0 ? "+X" : "-X";
+            }
+
+            if (ay >= ax && ay >= az)
+            {
+                return dy >= 0 ? "+Y" : "-Y";
+            }
+
+            return dz >= 0 ? "+Z" : "-Z";
         }
 
         // =====================================================
@@ -245,6 +496,44 @@ namespace Mimikyu.Helper
 
             return m;
         }
+
+        public static List<List<Point3d>> LoadDefectContours(
+            string jsonPath
+        )
+        {
+            string json =
+                File.ReadAllText(jsonPath);
+
+            DefectContainer data =
+                JsonConvert.DeserializeObject<DefectContainer>(
+                    json
+                );
+
+            List<List<Point3d>> contours =
+                new List<List<Point3d>>();
+
+            foreach (Defect defect in data.defects)
+            {
+                List<Point3d> contour =
+                    new List<Point3d>();
+
+                foreach (List<double> pt in defect.contour)
+                {
+                    contour.Add(
+                        new Point3d(
+                            pt[0],
+                            pt[1],
+                            0
+                        )
+                    );
+                }
+
+                contours.Add(contour);
+            }
+
+            return contours;
+        }
+
 
         // =====================================================
         // LOAD KUKA POSES
@@ -437,11 +726,14 @@ namespace Mimikyu.Helper
             CameraIntrinsics K
         )
         {
+
             double x =
-                (u - K.cx) / K.fx;
+                (u - K.camera_matrix.cx)
+                / K.camera_matrix.fx;
 
             double y =
-                (v - K.cy) / K.fy;
+                (v - K.camera_matrix.cy)
+                / K.camera_matrix.fy;
 
             Vector3d ray =
                 new Vector3d(
