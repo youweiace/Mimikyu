@@ -397,15 +397,15 @@ namespace Mimikyu.Helper
 
             if (ax >= ay && ax >= az)
             {
-                return dx >= 0 ? "+X" : "-X";
+                return dx >= 0 ? "posX" : "negX";
             }
 
             if (ay >= ax && ay >= az)
             {
-                return dy >= 0 ? "+Y" : "-Y";
+                return dy >= 0 ? "posY" : "negY";
             }
 
-            return dz >= 0 ? "+Z" : "-Z";
+            return dz >= 0 ? "posZ" : "negZ";
         }
 
         // =====================================================

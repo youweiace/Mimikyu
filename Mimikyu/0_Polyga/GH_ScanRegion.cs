@@ -43,7 +43,7 @@ namespace Mimikyu.Polyga
         /// </summary>
         protected override void RegisterOutputParams(GH_Component.GH_OutputParamManager pManager)
         {
-            pManager.AddPointParameter("ProjectedPoints", "PP", "List of projected points on the target plane.", GH_ParamAccess.tree);
+            //pManager.AddPointParameter("ProjectedPoints", "PP", "List of projected points on the target plane.", GH_ParamAccess.tree);
             pManager.AddPointParameter("PointsHits", "PP", "List of projected points on the target plane.", GH_ParamAccess.tree);
         }
 
@@ -81,28 +81,77 @@ namespace Mimikyu.Polyga
 
             for (int i = 0; i < contours.Count; i++)
             { 
-                List<Point3d> projectedPoints = 
-                    PixelHelper.ProjectPixelsToPlane(
-                                                        intrinsicsPath,
-                                                        cameraToRobotPath,
-                                                        posePath,
-                                                        poseIndex,
-                                                        contours[i],
-                                                        targetPlane
-                                                    );
-                List<PixelObjectHit> objectHit =  PixelHelper.ProjectPixelsToObjectMesh(intrinsicsPath,
-                    cameraToRobotPath, posePath, poseIndex, contours[i], mesh, objectPlane
-                                                     );
+                //List<Point3d> projectedPoints = 
+                //    PixelHelper.ProjectPixelsToPlane(
+                //                                        intrinsicsPath,
+                //                                        cameraToRobotPath,
+                //                                        posePath,
+                //                                        poseIndex,
+                //                                        contours[i],
+                //                                        targetPlane
+                //                                    );
+                List<PixelObjectHit> objectHits = 
+                                ProjectPixelsToObjectMesh(
+                                                          intrinsicsPath,
+                                                          cameraToRobotPath,
+                                                          posePath,
+                                                          poseIndex,
+                                                          contours[i],
+                                                          mesh,
+                                                          objectPlane
+                                                         );
+                //points.AddRange(projectedPoints, path);
+                List<Point3d> pts = objectHits.Select(p => p.Point).ToList();
+                List<string> sideString = objectHits.Select(s => s.SideKey).ToList();
 
-                GH_Path path = new GH_Path(i);
-                points.AddRange(projectedPoints, path);
-                pixelHits.AddRange(objectHit.Select(p => p.Point), path);
+                if (pts.Count != 0)
+                {
+                    for (int p = 0; p < pts.Count; p++)
+                    {
+                        switch (sideString[p])
+                        {
+                            case "posX":
+                                GH_Path pathPosX = new GH_Path((int)Sides.posX).AppendElement(i);
+                                pixelHits.Add(pts[p], pathPosX);
+                                break;
+                            case "posY":
+                                GH_Path pathPosY = new GH_Path((int)Sides.posY).AppendElement(i);
+                                pixelHits.Add(pts[p], pathPosY);
+                                break;
+                            case "negX":
+                                GH_Path pathNegX = new GH_Path((int)Sides.negX).AppendElement(i);
+                                pixelHits.Add(pts[p], pathNegX);
+                                break;
+                            case "negY":
+                                GH_Path pathNegY = new GH_Path((int)Sides.negY).AppendElement(i);
+                                pixelHits.Add(pts[p], pathNegY);
+                                break;
+                            case "posZ":
+                                GH_Path pathPosZ = new GH_Path((int)Sides.posZ).AppendElement(i);
+                                pixelHits.Add(pts[p], pathPosZ);
+                                break;
+                            case "negZ":
+                                GH_Path pathNegZ = new GH_Path((int)Sides.negZ).AppendElement(i);
+                                pixelHits.Add(pts[p], pathNegZ);
+                                break;
+                        }
+                        
+                    }
+                }
             }
 
-            DA.SetDataTree(0, points);
-            DA.SetDataTree(1, pixelHits);
+            //DA.SetDataTree(0, points);
+            DA.SetDataTree(0, pixelHits);
         }
-
+        public enum Sides
+        {
+            posX = 0,
+            posY = 1,
+            negX = 2,
+            negY = 3,
+            posZ = 4,
+            negZ = 5
+        }
         /// <summary>
         /// Provides an Icon for the component.
         /// </summary>
