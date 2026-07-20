@@ -419,76 +419,186 @@ namespace Mimikyu.Helper
             return unique;
         }
 
-        internal static bool CreateHullMesh(
+        internal static bool CreateHullMeshMIConvexHull(
             List<Point3d> points,
-            out Mesh hullMesh)
+            out Mesh hullMesh,
+            out string debug)
         {
             hullMesh = new Mesh();
+            debug = "";
 
             if (points == null || points.Count < 4)
-                return false;
-
-            var verts =
-                points.Select(
-                    (p, i) =>
-                        new HullVertex(p, i))
-                .ToList();
-
-            var hull =
-                ConvexHull.Create<
-                    HullVertex,
-                    DefaultConvexFace<HullVertex>>(
-                        verts);
-
-            Dictionary<HullVertex, int> map =
-                new Dictionary<HullVertex, int>();
-
-            int id = 0;
-
-            foreach (var v in hull.Result.Points)
             {
-                hullMesh.Vertices.Add(
-                    v.Position[0],
-                    v.Position[1],
-                    v.Position[2]);
-
-                map[v] = id;
-                id++;
+                debug = "Not enough points for 3D hull.";
+                return false;
             }
 
-            foreach (var face in hull.Result.Faces)
+            double tol =
+                RhinoDoc.ActiveDoc != null
+                ? RhinoDoc.ActiveDoc.ModelAbsoluteTolerance
+                : 0.001;
+
+            List<Point3d> cleanPoints =
+                RemoveDuplicatePoints(
+                    points,
+                    tol);
+
+            if (cleanPoints.Count < 4)
             {
-                var fv =
-                    face.Vertices.ToArray();
+                debug =
+                    "After duplicate removal, fewer than 4 points remain. " +
+                    "Input count = " + points.Count +
+                    ", clean count = " + cleanPoints.Count;
+
+                return false;
+            }
+
+            BoundingBox bb =
+                new BoundingBox(cleanPoints);
+
+            double dx = bb.Max.X - bb.Min.X;
+            double dy = bb.Max.Y - bb.Min.Y;
+            double dz = bb.Max.Z - bb.Min.Z;
+
+            debug =
+                "Input points = " + points.Count +
+                ", clean points = " + cleanPoints.Count +
+                ", bbox size = " +
+                dx.ToString("F3") + ", " +
+                dy.ToString("F3") + ", " +
+                dz.ToString("F3");
+
+            List<HullVertex> verts =
+                cleanPoints
+                .Select((p, i) => new HullVertex(p, i))
+                .ToList();
+
+            ConvexHullCreationResult<
+                HullVertex,
+                DefaultConvexFace<HullVertex>> hullResult;
+
+            try
+            {
+                hullResult =
+                    ConvexHull.Create<
+                        HullVertex,
+                        DefaultConvexFace<HullVertex>>(
+                            verts,
+                            1e-10);
+            }
+            catch (Exception ex)
+            {
+                debug +=
+                    " | MIConvexHull exception: " +
+                    ex.Message;
+
+                return false;
+            }
+
+            if (hullResult == null || hullResult.Result == null)
+            {
+                debug +=
+                    " | Hull result is null.";
+
+                return false;
+            }
+
+            var hull =
+                hullResult.Result;
+
+            if (hull.Faces == null)
+            {
+                debug +=
+                    " | Hull faces are null.";
+
+                return false;
+            }
+
+            Dictionary<int, int> vertexIndexMap =
+                new Dictionary<int, int>();
+
+            int faceCount = 0;
+
+            foreach (var face in hull.Faces)
+            {
+                if (face == null || face.Vertices == null)
+                    continue;
+
+                HullVertex[] fv =
+                    face.Vertices;
 
                 if (fv.Length != 3)
                     continue;
 
+                int[] meshIds =
+                    new int[3];
+
+                for (int i = 0; i < 3; i++)
+                {
+                    int originalId =
+                        fv[i].Index;
+
+                    if (!vertexIndexMap.ContainsKey(originalId))
+                    {
+                        Point3d p =
+                            cleanPoints[originalId];
+
+                        int newMeshId =
+                            hullMesh.Vertices.Add(p);
+
+                        vertexIndexMap[originalId] =
+                            newMeshId;
+                    }
+
+                    meshIds[i] =
+                        vertexIndexMap[originalId];
+                }
+
+                if (meshIds[0] == meshIds[1] ||
+                    meshIds[1] == meshIds[2] ||
+                    meshIds[2] == meshIds[0])
+                {
+                    continue;
+                }
+
                 hullMesh.Faces.AddFace(
-                    map[fv[0]],
-                    map[fv[1]],
-                    map[fv[2]]);
+                    meshIds[0],
+                    meshIds[1],
+                    meshIds[2]);
+
+                faceCount++;
             }
 
-            hullMesh.Vertices.CombineIdentical(
-                true,
-                true);
-
+            hullMesh.Vertices.CombineIdentical(true, true);
             hullMesh.Vertices.CullUnused();
 
-            hullMesh.UnifyNormals();
-
             hullMesh.FaceNormals.ComputeFaceNormals();
-
             hullMesh.Normals.ComputeNormals();
-
+            hullMesh.UnifyNormals();
             hullMesh.Compact();
 
-            return
-                hullMesh.IsValid &&
-                hullMesh.Faces.Count > 0;
-        }
+            debug +=
+                " | hull vertices = " + hullMesh.Vertices.Count +
+                ", hull faces = " + hullMesh.Faces.Count;
 
+            if (!hullMesh.IsValid || hullMesh.Faces.Count == 0)
+            {
+                debug +=
+                    " | Created hull mesh is invalid or empty.";
+
+                return false;
+            }
+
+            if (hullMesh.Faces.Count <= 1)
+            {
+                debug +=
+                    " | WARNING: Hull has only one face. Input is probably coplanar, collinear, collapsed, or only one face was returned by MIConvexHull.";
+
+                return false;
+            }
+
+            return true;
+        }
 
         internal static List<Point3d> DownsamplePointsEvenly(
             List<Point3d> pts,
@@ -523,6 +633,123 @@ namespace Mimikyu.Helper
             }
 
             return result;
+        }
+
+        internal static bool IsPointSetPlanar(
+            List<Point3d> pts,
+            double planarThreshold,
+            out double maxDistance)
+        {
+            maxDistance = 0.0;
+
+            if (pts == null || pts.Count < 3)
+                return true;
+
+            Plane plane;
+
+            PlaneFitResult fit =
+                Plane.FitPlaneToPoints(
+                    pts,
+                    out plane);
+
+            if (fit != PlaneFitResult.Success)
+                return false;
+
+            foreach (Point3d p in pts)
+            {
+                double d =
+                    Math.Abs(
+                        plane.DistanceTo(p));
+
+                if (d > maxDistance)
+                    maxDistance = d;
+            }
+
+            return maxDistance <= planarThreshold;
+        }
+
+        internal static bool TryCreatePlanarDefectBox(
+            List<Point3d> pts,
+            out Box box)
+        {
+            box = Box.Unset;
+
+            if (pts == null || pts.Count < 3)
+                return false;
+
+            Plane plane;
+
+            PlaneFitResult fit =
+                Plane.FitPlaneToPoints(
+                    pts,
+                    out plane);
+
+            if (fit != PlaneFitResult.Success)
+                return false;
+
+            // Make plane normal stable if possible.
+            if (plane.ZAxis * Vector3d.ZAxis < 0.0)
+                plane.Flip();
+
+            double minX = double.MaxValue;
+            double maxX = double.MinValue;
+
+            double minY = double.MaxValue;
+            double maxY = double.MinValue;
+
+            double minZ = double.MaxValue;
+            double maxZ = double.MinValue;
+
+            foreach (Point3d p in pts)
+            {
+                Vector3d q =
+                    p - plane.Origin;
+
+                double x =
+                    q * plane.XAxis;
+
+                double y =
+                    q * plane.YAxis;
+
+                double z =
+                    q * plane.ZAxis;
+
+                if (x < minX) minX = x;
+                if (x > maxX) maxX = x;
+
+                if (y < minY) minY = y;
+                if (y > maxY) maxY = y;
+
+                if (z < minZ) minZ = z;
+                if (z > maxZ) maxZ = z;
+            }
+
+            double tol =
+                RhinoDoc.ActiveDoc != null
+                ? RhinoDoc.ActiveDoc.ModelAbsoluteTolerance
+                : 0.001;
+
+            // Give the planar box a tiny thickness so Rhino Box remains valid.
+            if (Math.Abs(maxZ - minZ) < tol)
+            {
+                minZ = -tol;
+                maxZ = tol;
+            }
+
+            if (Math.Abs(maxX - minX) < tol ||
+                Math.Abs(maxY - minY) < tol)
+            {
+                return false;
+            }
+
+            box =
+                new Box(
+                    plane,
+                    new Interval(minX, maxX),
+                    new Interval(minY, maxY),
+                    new Interval(minZ, maxZ));
+
+            return box.IsValid;
         }
 
         // ====================================================================

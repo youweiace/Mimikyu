@@ -79,7 +79,7 @@ namespace Mimikyu
             double overlap = 0.10;
             double mergeDistance = 80.0;
             int maxHullPoints = 120;
-            double threeDThreshold = 20.0;
+            double threeDThreshold = 5.0;
 
             if (!DA.GetData(0, ref objectMesh)) return;
             if (!DA.GetDataTree(1, out defectTree)) return;
@@ -197,40 +197,104 @@ namespace Mimikyu
                         regionPts,
                         RhinoDoc.ActiveDoc.ModelAbsoluteTolerance);
 
-                Mesh hullMesh;
 
-                bool okHull =
-                    CreateHullMesh(
+                // ------------------------------------------------------------
+                // Decide if this merged region is planar or truly 3D
+                // ------------------------------------------------------------
+                bool isPlanar;
+                double planarThickness;
+
+                isPlanar =
+                    IsPointSetPlanar(
                         hullInputPts,
-                        out hullMesh);
+                        threeDThreshold,
+                        out planarThickness);
 
-                if (!okHull || hullMesh == null || !hullMesh.IsValid || hullMesh.Faces.Count == 0)
+                Box regionBox = Box.Unset;
+                Mesh hullMesh = null;
+
+                if (isPlanar)
                 {
-                    infoTree.Add(
-                        "Skipped region " + r +
-                        ": failed to create convex hull mesh.",
-                        outPath);
+                    // --------------------------------------------------------
+                    // Planar defect:
+                    // Use best-fit plane + planar local bounding box.
+                    // This is better for cracks, knots, stains, surface damage.
+                    // --------------------------------------------------------
+                    bool okPlanarBox =
+                        TryCreatePlanarDefectBox(
+                            hullInputPts,
+                            out regionBox);
 
-                    continue;
+                    if (!okPlanarBox || !regionBox.IsValid)
+                    {
+                        infoTree.Add(
+                            "Skipped region " + r +
+                            ": failed to create planar defect box.",
+                            outPath);
+
+                        continue;
+                    }
+
+                    infoTree.Add(
+                        "Region " + r +
+                        " uses PLANAR workflow. Thickness = " +
+                        planarThickness.ToString("F2"),
+                        outPath);
                 }
-
-                hullMesh.Normals.ComputeNormals();
-                hullMesh.FaceNormals.ComputeFaceNormals();
-                hullMesh.Compact();
-
-                hullTree.Add(hullMesh, outPath);
-
-                Box regionBox =
-                    GetMinimumBoundingBox3D(hullMesh);
-
-                if (!regionBox.IsValid)
+                else
                 {
+                    // --------------------------------------------------------
+                    // True 3D defect:
+                    // Use MIConvexHull + your original minimum 3D OBB.
+                    // This is better for broken edges, corner damage, chunks.
+                    // --------------------------------------------------------
+                    string hullDebug;
+
+                    bool okHull =
+                        CreateHullMeshMIConvexHull(
+                            hullInputPts,
+                            out hullMesh,
+                            out hullDebug);
+
                     infoTree.Add(
-                        "Skipped region " + r +
-                        ": invalid minimum 3D OBB.",
+                        "Region " + r + " hull debug: " + hullDebug,
                         outPath);
 
-                    continue;
+                    if (!okHull || hullMesh == null || !hullMesh.IsValid || hullMesh.Faces.Count == 0)
+                    {
+                        infoTree.Add(
+                            "Skipped region " + r +
+                            ": failed to create a valid 3D convex hull.",
+                            outPath);
+
+                        continue;
+                    }
+
+                    hullMesh.Normals.ComputeNormals();
+                    hullMesh.FaceNormals.ComputeFaceNormals();
+                    hullMesh.Compact();
+
+                    hullTree.Add(hullMesh, outPath);
+
+                    regionBox =
+                        GetMinimumBoundingBox3D(hullMesh);
+
+                    if (!regionBox.IsValid)
+                    {
+                        infoTree.Add(
+                            "Skipped region " + r +
+                            ": invalid minimum 3D OBB.",
+                            outPath);
+
+                        continue;
+                    }
+
+                    infoTree.Add(
+                        "Region " + r +
+                        " uses 3D HULL workflow. Thickness = " +
+                        planarThickness.ToString("F2") +
+                        ", hull faces = " + hullMesh.Faces.Count,
+                        outPath);
                 }
 
                 boxTree.Add(regionBox, outPath);

@@ -45,7 +45,7 @@ namespace Mimikyu.Connection
         /// </summary>
         public GH_Client()
           : base("Client", "C",
-              "PC as server, sends robot positions and listening to robot actions",
+              "PC as Client, sends robot positions and listening to robot actions",
               "Mimikyu", "PC_Robot")
         {
             lastSentTarget = new RobotPose();

@@ -18,9 +18,9 @@ namespace Mimikyu.Polyga
         /// Initializes a new instance of the GH_ScanRegion class.
         /// </summary>
         public GH_ScanRegion()
-          : base("ScanRegion", "R",
-              "Detailed Scanning Region",
-              "Mimikyu", "Polyga")
+          : base("DefectRegion", "DefReg",
+              "Defect Pixels Projected to Object",
+              "Mimikyu", "PC_Robot")
         {
         }
 
@@ -44,7 +44,7 @@ namespace Mimikyu.Polyga
         protected override void RegisterOutputParams(GH_Component.GH_OutputParamManager pManager)
         {
             //pManager.AddPointParameter("ProjectedPoints", "PP", "List of projected points on the target plane.", GH_ParamAccess.tree);
-            pManager.AddPointParameter("PointsHits", "PP", "List of projected points on the target plane.", GH_ParamAccess.tree);
+            pManager.AddPointParameter("DefectPoints", "DP", "Defect points projected on the BIM object", GH_ParamAccess.tree);
         }
 
         /// <summary>

@@ -21,7 +21,7 @@ namespace Mimikyu._1_PC_Robot
         /// Initializes a new instance of the GH_ImagePose class.
         /// </summary>
         public GH_ImagePose()
-          : base("ImagePose", "ImPo",
+          : base("ObjectPose", "ObjPo",
               "View-planning / scan-plane generation algorithm",
               "Mimikyu", "PC_Robot")
         {

@@ -14,7 +14,7 @@ namespace Mimikyu.Utlilities
         /// Initializes a new instance of the GH_ToRobotPose class.
         /// </summary>
         public GH_ToRobotPose()
-          : base("ToRobotPose", "TR",
+          : base("ToRobotPose", "ToRoPs",
               "Convert to Rhino Position to Robot Pose",
               "Mimikyu", "PC_Robot")
         {
