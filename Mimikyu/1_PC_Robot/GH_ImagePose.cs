@@ -9,9 +9,9 @@ using Rhino.Render.ChangeQueue;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using static Rhino.Render.TextureGraphInfo;
-using static System.Windows.Forms.DataFormats;
 using Mesh = Rhino.Geometry.Mesh;
+using static Mimikyu.Helper.ScannerHelper;
+
 
 namespace Mimikyu._1_PC_Robot
 {
@@ -471,132 +471,7 @@ namespace Mimikyu._1_PC_Robot
             DA.SetDataTree(0, planeTree);
             DA.SetData(1, obb);
         }
-        public class ScanFace
-        {
-
-            public Point3d Center;
-            public Vector3d Normal;
-            public Vector3d UAxis;
-            public Vector3d VAxis;
-            public double Width;
-            public double Height;
-
-            public Point3d PointAt(double u, double v)
-            {
-                double uu = (u - 0.5) * Width;
-                double vv = (v - 0.5) * Height;
-
-                return Center + UAxis * uu + VAxis * vv;
-            }
-        }
-        private static Mesh BrepToSingleMesh(Brep brep)
-        {
-            Mesh[] meshes = Mesh.CreateFromBrep(brep, MeshingParameters.Default);
-
-            Mesh joined = new Mesh();
-
-            if (meshes == null || meshes.Length == 0)
-                return joined;
-
-            foreach (Mesh m in meshes)
-            {
-                if (m != null)
-                    joined.Append(m);
-            }
-
-            joined.Vertices.CombineIdentical(true, true);
-            joined.Vertices.CullUnused();
-            joined.UnifyNormals();
-            joined.Normals.ComputeNormals();
-            joined.Compact();
-
-            return joined;
-        }
-
-        public static Box GetMinimumBoundingBox3D(Mesh inputMesh)
-        {
-
-            // Note: The inputMesh is already a convex hull
-
-            MeshFaceList faces = inputMesh.Faces;
-
-            List<Plane> planes = new List<Plane>();
-
-            // Get all the possible planes
-            foreach (MeshFace face in faces)
-            {
-                List<Point3d> pts = new List<Point3d>();
-                pts.Add(inputMesh.Vertices[face.A]);
-                pts.Add(inputMesh.Vertices[face.B]);
-                pts.Add(inputMesh.Vertices[face.C]);
-                Plane tempPlane = new Plane();
-                if (Plane.FitPlaneToPoints(pts, out tempPlane) == PlaneFitResult.Success)
-                    planes.Add(tempPlane);
-            }
-
-            List<Box> orientedBoxes = new List<Box>();
-
-            foreach (Plane pln in planes)
-            {
-                Box bb = new Box();
-                inputMesh.GetBoundingBox(pln, out bb);
-                orientedBoxes.Add(bb);
-            }
-
-            // Sort the bounding boxes by volume
-            List<Box> SortedBoundingBoxes = orientedBoxes.OrderBy(o => o.Volume).ToList();
-
-            // Return the smallest one
-            return SortedBoundingBoxes[0];
-        }
-
-        private static Plane CreateCameraPlane(Point3d target, Vector3d direction, double distance, Vector3d preferredXAxis)
-        {
-            direction.Unitize();
-
-            Point3d camPos =
-                target + direction * distance;
-
-            // TCP/camera Z points away from object
-            Vector3d zAxis = direction;
-            zAxis.Unitize();
-
-            // Try to keep plane X axis along the scan length
-            Vector3d xAxis =
-                preferredXAxis
-                - zAxis * Vector3d.Multiply(preferredXAxis, zAxis);
-
-            if (!xAxis.Unitize())
-            {
-                xAxis =
-                    Vector3d.CrossProduct(
-                        Vector3d.ZAxis,
-                        zAxis);
-
-                if (!xAxis.Unitize())
-                    xAxis = Vector3d.XAxis;
-            }
-
-            // Ensure Plane.ZAxis = zAxis
-            Vector3d yAxis =
-                Vector3d.CrossProduct(
-                    zAxis,
-                    xAxis);
-
-            yAxis.Unitize();
-
-            xAxis =
-                Vector3d.CrossProduct(
-                    yAxis,
-                    zAxis);
-
-            xAxis.Unitize();
-
-            return new Plane(
-                camPos,
-                -xAxis,
-                -yAxis);
-        }
+       
 
         /// <summary>
         /// Provides an Icon for the component.
