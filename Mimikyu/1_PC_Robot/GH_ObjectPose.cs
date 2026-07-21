@@ -15,12 +15,12 @@ using static Mimikyu.Helper.ScannerHelper;
 
 namespace Mimikyu._1_PC_Robot
 {
-    public class GH_ImagePose : GH_Component
+    public class GH_ObjectPose : GH_Component
     {
         /// <summary>
         /// Initializes a new instance of the GH_ImagePose class.
         /// </summary>
-        public GH_ImagePose()
+        public GH_ObjectPose()
           : base("ObjectPose", "ObjPo",
               "View-planning / scan-plane generation algorithm",
               "Mimikyu", "PC_Robot")

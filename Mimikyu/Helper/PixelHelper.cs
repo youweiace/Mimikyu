@@ -497,41 +497,48 @@ namespace Mimikyu.Helper
             return m;
         }
 
-        public static List<List<Point3d>> LoadDefectContours(
-            string jsonPath
-        )
+
+        public static Dictionary<string, List<List<Point3d>>>
+            LoadDefectContours(string jsonPath)
         {
-            string json =
-                File.ReadAllText(jsonPath);
+            string json = File.ReadAllText(jsonPath);
 
-            DefectContainer data =
-                JsonConvert.DeserializeObject<DefectContainer>(
-                    json
-                );
+            Dictionary<string, DefectContainer> allImages =
+                JsonConvert.DeserializeObject<
+                    Dictionary<string, DefectContainer>
+                >(json);
 
-            List<List<Point3d>> contours =
-                new List<List<Point3d>>();
+            Dictionary<string, List<List<Point3d>>> result =
+                new Dictionary<string, List<List<Point3d>>>();
 
-            foreach (Defect defect in data.defects)
+            foreach (var imageEntry in allImages)
             {
-                List<Point3d> contour =
-                    new List<Point3d>();
+                List<List<Point3d>> imageContours =
+                    new List<List<Point3d>>();
 
-                foreach (List<double> pt in defect.contour)
+                foreach (Defect defect in imageEntry.Value.defects)
                 {
-                    contour.Add(
-                        new Point3d(
-                            pt[0],
-                            pt[1],
-                            0
-                        )
-                    );
+                    List<Point3d> contour =
+                        new List<Point3d>();
+
+                    foreach (List<double> pt in defect.contour)
+                    {
+                        contour.Add(
+                            new Point3d(
+                                pt[0],
+                                pt[1],
+                                0
+                            )
+                        );
+                    }
+
+                    imageContours.Add(contour);
                 }
 
-                contours.Add(contour);
+                result[imageEntry.Key] = imageContours;
             }
 
-            return contours;
+            return result;
         }
 
 

@@ -127,8 +127,8 @@ namespace Mimikyu.Polyga
                 SBImage leftTexture = scanResult.getTextureImage();
                 //List<SBImage> rightImageList = scanResult.getCameraImages(1);
 
-                leftImageList[0].save($"{directory}\\{filename}.jpg");
-                leftTexture.save($"{directory}\\{filename}_texture.jpg");
+                //leftImageList[0].save($"{directory}\\{filename}.jpg");
+                leftTexture.save($"{directory}\\{filename}.jpg");
                 //rightImageList[0].save($"{directory}\\{filename}_right.jpg");
 
                 filename += 1;

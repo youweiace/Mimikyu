@@ -7,6 +7,7 @@ using Rhino.Geometry;
 using Rhino.UI;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using static Mimikyu.Helper.PixelHelper;
 
@@ -32,7 +33,6 @@ namespace Mimikyu.Polyga
             pManager.AddTextParameter("IntrinsicsPath", "I", "Json path to the camera intrinsics file.", GH_ParamAccess.item);
             pManager.AddTextParameter("CameraToRobotPath", "C", "Json path to the camera-to-robot transformation file.", GH_ParamAccess.item);
             pManager.AddTextParameter("PosePath", "P", "Json path to the robot pose file.", GH_ParamAccess.item);
-            pManager.AddIntegerParameter("PoseIndex", "PI", "Index of the pose to use.", GH_ParamAccess.item);
             pManager.AddTextParameter("PixelPath", "Px", "Json path of pixel coordinates to project.", GH_ParamAccess.item);
             pManager.AddPlaneParameter("TargetPlane", "TP", "The target plane to project the pixels onto.", GH_ParamAccess.item);
             pManager.AddBoxParameter("Box", "B", "Object Bounding Box", GH_ParamAccess.item);
@@ -57,7 +57,6 @@ namespace Mimikyu.Polyga
             string intrinsicsPath = default;
             string cameraToRobotPath = default;
             string posePath = default;
-            int poseIndex = 0;
             string pixelPath = default;
             Plane targetPlane = Plane.Unset;
             Box obb = default;
@@ -65,79 +64,84 @@ namespace Mimikyu.Polyga
             if (!DA.GetData(0, ref intrinsicsPath)) return;
             if (!DA.GetData(1, ref cameraToRobotPath)) return;
             if (!DA.GetData(2, ref posePath)) return;
-            if (!DA.GetData(3, ref poseIndex)) return;
-            if (!DA.GetData(4, ref pixelPath)) return;
-            if (!DA.GetData(5, ref targetPlane)) return;
-            if (!DA.GetData(6, ref obb)) return;
+            if (!DA.GetData(3, ref pixelPath)) return;
+            if (!DA.GetData(4, ref targetPlane)) return;
+            if (!DA.GetData(5, ref obb)) return;
 
             Plane objectPlane = obb.Plane;
             Mesh mesh = Mesh.CreateFromBox(obb, 1, 1, 1);
 
-            List<List<Point3d>> contours =
-                PixelHelper.LoadDefectContours(pixelPath);
+
+            Dictionary<string, List<List<Point3d>>> allDefects = LoadDefectContours(pixelPath);
 
             DataTree<Point3d> points = new DataTree<Point3d>();
             DataTree<Point3d> pixelHits = new DataTree<Point3d>();
+            int poseIndex = 0;
+            foreach (string imageName in allDefects.Keys)
+            {
+                List<List<Point3d>> contours = allDefects[imageName];
 
-            for (int i = 0; i < contours.Count; i++)
-            { 
-                //List<Point3d> projectedPoints = 
-                //    PixelHelper.ProjectPixelsToPlane(
-                //                                        intrinsicsPath,
-                //                                        cameraToRobotPath,
-                //                                        posePath,
-                //                                        poseIndex,
-                //                                        contours[i],
-                //                                        targetPlane
-                //                                    );
-                List<PixelObjectHit> objectHits = 
-                                ProjectPixelsToObjectMesh(
-                                                          intrinsicsPath,
-                                                          cameraToRobotPath,
-                                                          posePath,
-                                                          poseIndex,
-                                                          contours[i],
-                                                          mesh,
-                                                          objectPlane
-                                                         );
-                //points.AddRange(projectedPoints, path);
-                List<Point3d> pts = objectHits.Select(p => p.Point).ToList();
-                List<string> sideString = objectHits.Select(s => s.SideKey).ToList();
+                for (int i = 0; i < contours.Count; i++)
+                { 
+                    //List<Point3d> projectedPoints = 
+                    //    PixelHelper.ProjectPixelsToPlane(
+                    //                                        intrinsicsPath,
+                    //                                        cameraToRobotPath,
+                    //                                        posePath,
+                    //                                        poseIndex,
+                    //                                        contours[i],
+                    //                                        targetPlane
+                    //                                    );
+                    List<PixelObjectHit> objectHits = 
+                                    ProjectPixelsToObjectMesh(
+                                                              intrinsicsPath,
+                                                              cameraToRobotPath,
+                                                              posePath,
+                                                              poseIndex,
+                                                              contours[i],
+                                                              mesh,
+                                                              objectPlane
+                                                             );
+                    //points.AddRange(projectedPoints, path);
+                    List<Point3d> pts = objectHits.Select(p => p.Point).ToList();
+                    List<string> sideString = objectHits.Select(s => s.SideKey).ToList();
 
-                if (pts.Count != 0)
-                {
-                    for (int p = 0; p < pts.Count; p++)
+                    if (pts.Count != 0)
                     {
-                        switch (sideString[p])
+                        for (int p = 0; p < pts.Count; p++)
                         {
-                            case "posX":
-                                GH_Path pathPosX = new GH_Path((int)Sides.posX).AppendElement(i);
-                                pixelHits.Add(pts[p], pathPosX);
-                                break;
-                            case "posY":
-                                GH_Path pathPosY = new GH_Path((int)Sides.posY).AppendElement(i);
-                                pixelHits.Add(pts[p], pathPosY);
-                                break;
-                            case "negX":
-                                GH_Path pathNegX = new GH_Path((int)Sides.negX).AppendElement(i);
-                                pixelHits.Add(pts[p], pathNegX);
-                                break;
-                            case "negY":
-                                GH_Path pathNegY = new GH_Path((int)Sides.negY).AppendElement(i);
-                                pixelHits.Add(pts[p], pathNegY);
-                                break;
-                            case "posZ":
-                                GH_Path pathPosZ = new GH_Path((int)Sides.posZ).AppendElement(i);
-                                pixelHits.Add(pts[p], pathPosZ);
-                                break;
-                            case "negZ":
-                                GH_Path pathNegZ = new GH_Path((int)Sides.negZ).AppendElement(i);
-                                pixelHits.Add(pts[p], pathNegZ);
-                                break;
-                        }
+                            switch (sideString[p])
+                            {
+                                case "posX":
+                                    GH_Path pathPosX = new GH_Path(poseIndex).AppendElement((int)Sides.posX).AppendElement(i);
+                                    pixelHits.Add(pts[p], pathPosX);
+                                    break;
+                                case "posY":
+                                    GH_Path pathPosY = new GH_Path(poseIndex).AppendElement((int)Sides.posY).AppendElement(i);
+                                    pixelHits.Add(pts[p], pathPosY);
+                                    break;
+                                case "negX":
+                                    GH_Path pathNegX = new GH_Path(poseIndex).AppendElement((int)Sides.negX).AppendElement(i);
+                                    pixelHits.Add(pts[p], pathNegX);
+                                    break;
+                                case "negY":
+                                    GH_Path pathNegY = new GH_Path(poseIndex).AppendElement((int)Sides.negY).AppendElement(i);
+                                    pixelHits.Add(pts[p], pathNegY);
+                                    break;
+                                case "posZ":
+                                    GH_Path pathPosZ = new GH_Path(poseIndex).AppendElement((int)Sides.posZ).AppendElement(i);
+                                    pixelHits.Add(pts[p], pathPosZ);
+                                    break;
+                                case "negZ":
+                                    GH_Path pathNegZ = new GH_Path(poseIndex).AppendElement((int)Sides.negZ).AppendElement(i);
+                                    pixelHits.Add(pts[p], pathNegZ);
+                                    break;
+                            }
                         
+                        }
                     }
                 }
+                poseIndex++;
             }
 
             //DA.SetDataTree(0, points);
