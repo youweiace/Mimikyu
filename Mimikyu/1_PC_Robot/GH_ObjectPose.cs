@@ -9,8 +9,9 @@ using Rhino.Render.ChangeQueue;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Mesh = Rhino.Geometry.Mesh;
+using static Mimikyu.Helper.PixelHelper;
 using static Mimikyu.Helper.ScannerHelper;
+using Mesh = Rhino.Geometry.Mesh;
 
 
 namespace Mimikyu._1_PC_Robot
@@ -36,10 +37,12 @@ namespace Mimikyu._1_PC_Robot
             pManager.AddNumberParameter("Capture Width", "W", "Width of the capture area in mm", GH_ParamAccess.item, 428);
             pManager.AddNumberParameter("Capture Height", "H", "Height of the capture area in mm", GH_ParamAccess.item, 330);
             pManager.AddNumberParameter("Distance", "D", "Distance from the object to the camera in mm", GH_ParamAccess.item, 500);
+            pManager.AddTextParameter("IntrinsicsPath", "I", "Json path to the camera intrinsics file.", GH_ParamAccess.item);
             pManager.AddIntegerParameter("Mode", "M", "Scanning mode\n 0: Face Scans\n 1: Oblique 2 Sides\n 2: Oblique 4 Corners (under development)", GH_ParamAccess.item);
             pManager[1].Optional = true;
             pManager[2].Optional = true;
             pManager[3].Optional = true;
+            pManager[4].Optional = true;
         }
 
         /// <summary>
@@ -61,6 +64,7 @@ namespace Mimikyu._1_PC_Robot
             double CaptureW = default;
             double CaptureH = default;
             double Distance = default;
+            string intrinsicsPath = null;
             double Overlap = 0.10;
             int mode = 0;
 
@@ -70,7 +74,8 @@ namespace Mimikyu._1_PC_Robot
             if (!DA.GetData(1, ref CaptureW)) return;
             if (!DA.GetData(2, ref CaptureH)) return;
             if (!DA.GetData(3, ref Distance)) return;
-            if (!DA.GetData(4, ref mode)) return;
+            DA.GetData(4, ref intrinsicsPath);
+            if (!DA.GetData(5, ref mode)) return;
 
             Mesh mesh = BrepToSingleMesh(inGeo);
 
@@ -404,6 +409,28 @@ namespace Mimikyu._1_PC_Robot
                     // Number of positions along object length
                     // ------------------------------------------------------------
 
+                    if (intrinsicsPath != null)
+                    {
+                        CameraIntrinsics K = LoadIntrinsics(intrinsicsPath);
+                        
+                        double imageWidth = K.image_width;
+                        double imageHeight = K.image_height;
+
+                        double fx = K.camera_matrix.fx;
+                        double fy = K.camera_matrix.fy;
+
+                        double distanceW =
+                            CaptureW * fx / imageWidth;
+
+                        double distanceH =
+                            CaptureH * fy / imageHeight;
+
+                        Distance = Math.Max(distanceW, distanceH);
+
+                        CaptureW = Distance * imageWidth / fx;
+                        CaptureH = Distance * imageHeight / fy;
+                    }
+
                     double step =
                         CaptureW * (1.0 - Overlap);
 
@@ -420,8 +447,6 @@ namespace Mimikyu._1_PC_Robot
                     Point3d upCenter =
                         center +
                         verticalAxis * (height * 0.5);
-
-
 
                     // ------------------------------------------------------------
                     // Generate scan targets and camera planes
@@ -440,8 +465,9 @@ namespace Mimikyu._1_PC_Robot
                             t = (double)i / (count - 1);
 
                         Point3d target =
-                            upCenter +
+                            center +
                             lengthAxis * ((t - 0.5) * length);
+                       
 
                         Plane leftPlane =
                             CreateCameraPlane(

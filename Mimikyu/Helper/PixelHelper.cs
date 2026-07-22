@@ -412,7 +412,7 @@ namespace Mimikyu.Helper
         // LOAD JSON FILES WITH NEWTONSOFT.JSON
         // =====================================================
 
-        private static CameraIntrinsics LoadIntrinsics(
+        internal static CameraIntrinsics LoadIntrinsics(
             string path
         )
         {
