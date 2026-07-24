@@ -1,0 +1,136 @@
+﻿using Grasshopper.Kernel;
+using Mimikyu.Helper;
+using Rhino.Geometry;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+
+namespace Mimikyu._1_PC_Robot
+{
+    public class GH_SortPlanesSerpentine : GH_Component
+    {
+        /// <summary>
+        /// Initializes a new instance of the GH_SortPlanesSerpentine class.
+        /// </summary>
+        public GH_SortPlanesSerpentine()
+          : base("SortPlanesSerpentine", "SPS",
+              "Serpentine (boustrophedon) ordering",
+              "Mimikyu", "PC_Robot")
+        {
+        }
+
+        /// <summary>
+        /// Registers all the input parameters for this component.
+        /// </summary>
+        protected override void RegisterInputParams(GH_Component.GH_InputParamManager pManager)
+        {
+            pManager.AddPlaneParameter("Planes", "P", "Unordered Planes", GH_ParamAccess.list);
+            pManager.AddPointParameter("CameraBase", "CB", "Height where camera should flip to the other side", GH_ParamAccess.item);
+            pManager[1].Optional = true;
+        }
+
+        /// <summary>
+        /// Registers all the output parameters for this component.
+        /// </summary>
+        protected override void RegisterOutputParams(GH_Component.GH_OutputParamManager pManager)
+        {
+            pManager.AddPlaneParameter("Planes", "P", "Serpentine Planes", GH_ParamAccess.list);
+        }
+
+        /// <summary>
+        /// This is the method that actually does the work.
+        /// </summary>
+        /// <param name="DA">The DA object is used to retrieve from inputs and store in outputs.</param>
+        protected override void SolveInstance(IGH_DataAccess DA)
+        {
+            List<Plane> planes = new List<Plane>();
+            Point3d cameraBase = Point3d.Unset;
+
+            if (!DA.GetDataList(0, planes)) return;
+            DA.GetData(1, ref cameraBase);
+
+            double rowTolerance = 10.0;
+
+            // Sort by Y first
+            var sortedByY = planes
+                .OrderBy(p => p.OriginY)
+                .ToList();
+
+            // Group into rows
+            List<List<Plane>> rows = new List<List<Plane>>();
+            List<Plane> currentRow = new List<Plane>();
+
+            double currentY = sortedByY[0].OriginY;
+
+            foreach (var p in sortedByY)
+            {
+                if (Math.Abs(p.OriginY - currentY) <= rowTolerance)
+                {
+                    currentRow.Add(p);
+                }
+                else
+                {
+                    rows.Add(currentRow);
+
+                    currentRow = new List<Plane>();
+                    currentRow.Add(p);
+
+                    currentY = p.OriginY;
+                }
+            }
+
+            rows.Add(currentRow);
+
+            // Build serpentine path
+            List<Plane> serpentinePlanes = new List<Plane>();
+
+            for (int row = 0; row < rows.Count; row++)
+            {
+                var rowPlanes = rows[row]
+                    .OrderBy(p => p.OriginX)
+                    .ToList();
+
+                if (row % 2 == 1)
+                    rowPlanes.Reverse();
+
+                serpentinePlanes.AddRange(rowPlanes);
+            }
+
+            if (cameraBase != Point3d.Unset)
+            {
+                for (int i = 0; i < planes.Count; i++)
+                {
+                    Plane p = serpentinePlanes[i];
+                    if (p.OriginX > cameraBase.Z)
+                        p.Rotate(Math.PI, p.ZAxis);
+                    serpentinePlanes[i] = p;
+
+                }
+            }
+
+            DA.SetDataList(0, serpentinePlanes);
+        
+        }
+
+        /// <summary>
+        /// Provides an Icon for the component.
+        /// </summary>
+        protected override System.Drawing.Bitmap Icon
+        {
+            get
+            {
+                //You can add image files to your project resources and access them like this:
+                // return Resources.IconForThisComponent;
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Gets the unique ID for this component. Do not change this ID after release.
+        /// </summary>
+        public override Guid ComponentGuid
+        {
+            get { return new Guid("BBA3C63D-ED0D-4B1B-ADC6-25999AD5B6B1"); }
+        }
+    }
+}
