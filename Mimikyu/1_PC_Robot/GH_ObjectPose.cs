@@ -35,10 +35,13 @@ namespace Mimikyu._1_PC_Robot
             pManager.AddNumberParameter("Distance", "D", "Distance from the object to the camera in mm", GH_ParamAccess.item, 500);
             pManager.AddTextParameter("IntrinsicsPath", "I", "Json path to the camera intrinsics file.", GH_ParamAccess.item);
             pManager.AddIntegerParameter("Mode", "M", "Scanning mode\n 0: Face Scans\n 1: Oblique 2 Sides\n 2: Oblique 4 Corners (under development)", GH_ParamAccess.item);
+            pManager.AddNumberParameter("Margin", "M", "Scan extending edge margin percentage", GH_ParamAccess.item, 0.15);
             pManager[1].Optional = true;
             pManager[2].Optional = true;
             pManager[3].Optional = true;
             pManager[4].Optional = true;
+            pManager[5].Optional = true;
+
         }
 
         /// <summary>
@@ -64,6 +67,7 @@ namespace Mimikyu._1_PC_Robot
             string intrinsicsPath = null;
             double Overlap = 0.10;
             int mode = 0;
+            double marginBuffer = 0.15;
 
             DataTree<Plane> planeTree = new DataTree<Plane>();
 
@@ -73,6 +77,7 @@ namespace Mimikyu._1_PC_Robot
             if (!DA.GetData(3, ref Distance)) return;
             DA.GetData(4, ref intrinsicsPath);
             if (!DA.GetData(5, ref mode)) return;
+            if (!DA.GetData(6, ref marginBuffer)) return;
 
             ScanObject scanObject =
                 ScanObject.FromBrep(inGeo);
@@ -132,15 +137,32 @@ namespace Mimikyu._1_PC_Robot
                                 double u;
                                 double v;
 
+                                double marginU =
+                                    Math.Min(
+                                        0.49,
+                                        (CaptureH * (0.5 - marginBuffer)) / face.Width);
+
+                                double marginV =
+                                    Math.Min(
+                                        0.49,
+                                        (CaptureW * (0.5 - marginBuffer)) / face.Height);
+
                                 if (countU == 1)
                                     u = 0.5;
                                 else
-                                    u = (double)col / (countU - 1);
+                                    u =
+                                        marginU +
+                                        ((double)col / (countU - 1)) *
+                                        (1.0 - 2.0 * marginU);
 
                                 if (countV == 1)
                                     v = 0.5;
                                 else
-                                    v = (double)row / (countV - 1);
+                                    v =
+                                        marginV +
+                                        ((double)row / (countV - 1)) *
+                                        (1.0 - 2.0 * marginV);
+
 
                                 Point3d facePoint = face.PointAt(u, v);
 
@@ -365,19 +387,31 @@ namespace Mimikyu._1_PC_Robot
                     GH_Path leftPath = new GH_Path(0);
                     GH_Path rightPath = new GH_Path(1);
 
+                    double margin =
+                        Math.Min(
+                            0.49,
+                            (CaptureW * (0.5 - marginBuffer)) / length);
+
                     for (int i = 0; i < count; i++)
                     {
                         double t;
 
                         if (count == 1)
+                        {
                             t = 0.5;
+                        }
                         else
-                            t = (double)i / (count - 1);
+                        {
+                            t =
+                                margin +
+                                ((double)i / (count - 1)) *
+                                (1.0 - 2.0 * margin);
+                        }
 
                         Point3d target =
                             center +
                             lengthAxis * ((t - 0.5) * length);
-                       
+
 
                         Plane leftPlane =
                             CreateCameraPlane(
