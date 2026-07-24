@@ -103,6 +103,28 @@ namespace Mimikyu._1_PC_Robot
             Point3d center =
                 scanObject.Center;
 
+            if (intrinsicsPath != null)
+            {
+                CameraIntrinsics K = LoadIntrinsics(intrinsicsPath);
+
+                double imageWidth = K.image_width;
+                double imageHeight = K.image_height;
+
+                double fx = K.camera_matrix.fx;
+                double fy = K.camera_matrix.fy;
+
+                double distanceW =
+                    CaptureW * fx / imageWidth;
+
+                double distanceH =
+                    CaptureH * fy / imageHeight;
+
+                Distance = Math.Max(distanceW, distanceH);
+
+                CaptureW = Distance * imageWidth / fx;
+                CaptureH = Distance * imageHeight / fy;
+            }
+
             switch (mode)
             {
                 case 0:
@@ -111,8 +133,8 @@ namespace Mimikyu._1_PC_Robot
                         scanObject.GetObjectPoseFacesInOriginalOrder();
 
 
-                    double stepU = CaptureH * (1.0 - Overlap);
-                    double stepV = CaptureW * (1.0 - Overlap);
+                    double stepU = CaptureW * (1.0 - Overlap);
+                    double stepV = CaptureH * (1.0 - Overlap);
 
                     for (int f = 0; f < faces.Count; f++)
                     {
@@ -341,27 +363,7 @@ namespace Mimikyu._1_PC_Robot
                     // Number of positions along object length
                     // ------------------------------------------------------------
 
-                    if (intrinsicsPath != null)
-                    {
-                        CameraIntrinsics K = LoadIntrinsics(intrinsicsPath);
-                        
-                        double imageWidth = K.image_width;
-                        double imageHeight = K.image_height;
 
-                        double fx = K.camera_matrix.fx;
-                        double fy = K.camera_matrix.fy;
-
-                        double distanceW =
-                            CaptureW * fx / imageWidth;
-
-                        double distanceH =
-                            CaptureH * fy / imageHeight;
-
-                        Distance = Math.Max(distanceW, distanceH);
-
-                        CaptureW = Distance * imageWidth / fx;
-                        CaptureH = Distance * imageHeight / fy;
-                    }
 
                     double step =
                         CaptureW * (1.0 - Overlap);
