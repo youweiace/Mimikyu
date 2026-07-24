@@ -35,7 +35,7 @@ namespace Mimikyu
             pManager.AddNumberParameter("Capture Height","H", "Camera/scanner capture height in mm",GH_ParamAccess.item,330.0);
             pManager.AddNumberParameter("Distance", "D","Camera distance from scan target in mm", GH_ParamAccess.item,500.0);
             pManager.AddNumberParameter("Overlap","O","Overlap ratio between neighbouring captures, e.g. 0.10 = 10%", GH_ParamAccess.item,0.10);
-            pManager.AddNumberParameter("Merge Distance", "Md", "Distance in mm used to merge nearby defect branches into one scan region", GH_ParamAccess.item, 80.0);
+            pManager.AddNumberParameter("Merge Distance", "Md", "Distance in mm used to merge nearby defect branches into one scan region", GH_ParamAccess.item, 330.0);
             pManager.AddIntegerParameter("Max Hull Points","Mh","Maximum number of points used to compute the convex hull per merged region.", GH_ParamAccess.item,120);
             pManager.AddNumberParameter("3D Threshold","T3D","If the smallest OBB dimension is larger than this value, the region is marked as 3D/non-planar.", GH_ParamAccess.item,20.0);
 
@@ -77,7 +77,7 @@ namespace Mimikyu
             double captureH = 330.0;
             double distance = 500.0;
             double overlap = 0.10;
-            double mergeDistance = 80.0;
+            double mergeDistance = 330.0;
             int maxHullPoints = 120;
             double threeDThreshold = 5.0;
 
@@ -415,15 +415,31 @@ namespace Mimikyu
                             ? countU - 1 - colIter
                             : colIter;
 
+                        double overscan = 0.15; // 15%
+
+                        double marginU =
+                            Math.Min(
+                                0.49,
+                                (captureW * (0.5 - overscan)) / sizeU);
+
+                        double marginV =
+                            Math.Min(
+                                0.49,
+                                (captureH * (0.5 - overscan)) / sizeV);
+
                         double tu =
                             countU == 1
                             ? 0.5
-                            : (double)col / (double)(countU - 1);
+                            : marginU +
+                              ((double)col / (countU - 1)) *
+                              (1.0 - 2.0 * marginU);
 
                         double tv =
                             countV == 1
                             ? 0.5
-                            : (double)row / (double)(countV - 1);
+                            : marginV +
+                              ((double)row / (countV - 1)) *
+                              (1.0 - 2.0 * marginV);
 
                         double[] t = new double[3];
 
