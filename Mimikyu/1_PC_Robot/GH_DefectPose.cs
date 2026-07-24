@@ -37,6 +37,13 @@ namespace Mimikyu
             pManager.AddNumberParameter("Merge Distance", "Md", "Distance in mm used to merge nearby defect branches into one scan region", GH_ParamAccess.item, 80.0);
             pManager.AddIntegerParameter("Max Hull Points", "Mh", "Maximum number of points used to compute the convex hull per merged region. Keeps hull computation reasonable.", GH_ParamAccess.item, 120);
             pManager.AddNumberParameter("3D Threshold", "T3D", "If the smallest OBB dimension is larger than this value, the region is marked as 3D/non-planar.", GH_ParamAccess.item, 20.0);
+            pManager.AddBoxParameter(
+    "Object Box",
+    "B",
+    "Object oriented bounding box used to define stable scan-object sides",
+    GH_ParamAccess.item);
+
+            pManager[9].Optional = false;
 
             pManager[2].Optional = true;
             pManager[3].Optional = true;
@@ -80,6 +87,7 @@ namespace Mimikyu
             double mergeDistance = 80.0;
             int maxHullPoints = 120;
             double threeDThreshold = 5.0;
+            Box objectBox = Box.Unset;
 
             if (!DA.GetData(0, ref objectMesh)) return;
             if (!DA.GetDataTree(1, out defectTree)) return;
@@ -91,6 +99,7 @@ namespace Mimikyu
             DA.GetData(6, ref mergeDistance);
             DA.GetData(7, ref maxHullPoints);
             DA.GetData(8, ref threeDThreshold);
+            if (!DA.GetData(9, ref objectBox))return;
 
             DataTree<Plane> poseTree = new DataTree<Plane>();
             DataTree<Box> boxTree = new DataTree<Box>();
@@ -118,7 +127,10 @@ namespace Mimikyu
 
             objectMesh.FaceNormals.ComputeFaceNormals();
             objectMesh.Normals.ComputeNormals();
-
+            ScanObject scanObject =
+    ScanObject.FromMeshAndBox(
+        objectMesh,
+        objectBox);
             captureW = Math.Abs(captureW);
             captureH = Math.Abs(captureH);
             distance = Math.Abs(distance);
@@ -321,13 +333,29 @@ namespace Mimikyu
                 Vector3d vAxis = axes[vId];
                 Vector3d boxNormal = axes[nId];
 
+
                 uAxis.Unitize();
                 vAxis.Unitize();
                 boxNormal.Unitize();
 
+                List<Vector3d> scanDirections =
+                    GetScanDirections(
+                        region,
+                        scanObject);
+
+                RegionType regionType = GetRegionType(region);
+
+                infoTree.Add(
+                            "Region " + r +
+                            " scan type: " + regionType.ToString() +
+                            " | SideIds: " + string.Join(",", region.SideIds) +
+                            " | Scan directions: " + scanDirections.Count,
+                            outPath);
+
                 double sizeU = sizes[uId];
                 double sizeV = sizes[vId];
                 double sizeN = sizes[nId];
+
 
                 int countU =
                     Math.Max(
@@ -417,18 +445,65 @@ namespace Mimikyu
                         if (!localNormal.Unitize())
                             localNormal = boxNormal;
 
-                        // Keep normal roughly consistent with OBB normal.
-                        if (localNormal * boxNormal < 0.0)
-                            localNormal = -localNormal;
+                        //RegionType regionType =    GetRegionType(region);
 
-                        Plane pose =
-                            CreateCameraPlane(
-                                surfaceTarget,
-                                localNormal,
-                                distance,
-                                uAxis);
+                        List<Vector3d> finalViewDirections =
+                            new List<Vector3d>();
 
-                        poseTree.Add(pose, outPath);
+                        if (regionType == RegionType.Surface)
+                        {
+                            foreach (Vector3d dirRaw in scanDirections)
+                            {
+                                Vector3d dir =
+                                    dirRaw;
+
+                                if (!dir.Unitize())
+                                    continue;
+
+                                List<Vector3d> crackViews =
+                                    CreateCrackViews(
+                                        dir,
+                                        uAxis,
+                                        30.0);
+
+                                finalViewDirections.AddRange(
+                                    crackViews);
+                            }
+                        }
+                        else
+                        {
+                            foreach (Vector3d dirRaw in scanDirections)
+                            {
+                                Vector3d dir =
+                                    dirRaw;
+
+                                if (!dir.Unitize())
+                                    continue;
+
+                                finalViewDirections.Add(
+                                    dir);
+                            }
+                        }
+
+                        foreach (Vector3d viewDirRaw in finalViewDirections)
+                        {
+                            Vector3d viewDir =
+                                viewDirRaw;
+
+                            if (!viewDir.Unitize())
+                                continue;
+
+                            Plane pose =
+                                CreateCameraPlane(
+                                    surfaceTarget,
+                                    viewDir,
+                                    distance,
+                                    uAxis);
+
+                            poseTree.Add(
+                                pose,
+                                outPath);
+                        }
                     }
                 }
             }

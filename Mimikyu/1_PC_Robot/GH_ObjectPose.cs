@@ -1,14 +1,10 @@
 ﻿using Grasshopper;
 using Grasshopper.Kernel;
 using Grasshopper.Kernel.Data;
-using Grasshopper.Kernel.Geometry.Delaunay;
 using Rhino;
 using Rhino.Geometry;
-using Rhino.Geometry.Collections;
-using Rhino.Render.ChangeQueue;
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using static Mimikyu.Helper.PixelHelper;
 using static Mimikyu.Helper.ScannerHelper;
 using Mesh = Rhino.Geometry.Mesh;
@@ -52,6 +48,7 @@ namespace Mimikyu._1_PC_Robot
         {
             pManager.AddPlaneParameter("Poses", "P", "Pose as Planes", GH_ParamAccess.tree);
             pManager.AddBoxParameter("Box", "B", "Box", GH_ParamAccess.item);
+            pManager.AddGenericParameter("Scan Object","SO","Shared scan object definition for downstream defect projection and defect scanning",GH_ParamAccess.item);
         }
 
         /// <summary>
@@ -77,15 +74,29 @@ namespace Mimikyu._1_PC_Robot
             DA.GetData(4, ref intrinsicsPath);
             if (!DA.GetData(5, ref mode)) return;
 
-            Mesh mesh = BrepToSingleMesh(inGeo);
+            ScanObject scanObject =
+                ScanObject.FromBrep(inGeo);
 
-            Box obb = GetMinimumBoundingBox3D(mesh);
-            Plane objectPlane = obb.Plane;
+            Mesh mesh =
+                scanObject.Mesh;
 
-            double sx = obb.X.Length;
-            double sy = obb.Y.Length;
-            double sz = obb.Z.Length;
-            Point3d center = obb.Center;
+            Box obb =
+                scanObject.BoundingBox;
+
+            Plane objectPlane =
+                scanObject.ObjectPlane;
+
+            double sx =
+                scanObject.SizeX;
+
+            double sy =
+                scanObject.SizeY;
+
+            double sz =
+                scanObject.SizeZ;
+
+            Point3d center =
+                scanObject.Center;
 
             switch (mode)
             {
@@ -496,6 +507,7 @@ namespace Mimikyu._1_PC_Robot
 
             DA.SetDataTree(0, planeTree);
             DA.SetData(1, obb);
+            DA.SetData(2, scanObject);
         }
        
 

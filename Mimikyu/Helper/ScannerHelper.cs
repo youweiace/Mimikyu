@@ -33,11 +33,379 @@ namespace Mimikyu.Helper
                 return Center + UAxis * uu + VAxis * vv;
             }
         }
+        public enum Sides
+        {
+            posX = 0,
+            posY = 1,
+            negX = 2,
+            negY = 3,
+            posZ = 4,
+            negZ = 5
+        }
 
+        public class ScanObject
+        {
+            public Mesh Mesh;
+            public Box BoundingBox;
+            public Plane ObjectPlane;
+
+            public Point3d Center;
+
+            public double SizeX;
+            public double SizeY;
+            public double SizeZ;
+
+            public Dictionary<int, ScanFace> Faces =
+                new Dictionary<int, ScanFace>();
+
+            public static ScanObject FromBrep(Brep brep)
+            {
+                Mesh mesh =
+                    BrepToSingleMesh(brep);
+
+                Box box =
+                    GetMinimumBoundingBox3D(mesh);
+
+                return FromMeshAndBox(
+                    mesh,
+                    box);
+            }
+
+            public static ScanObject FromMeshAndBox(
+                Mesh mesh,
+                Box box)
+            {
+                if (mesh == null || !mesh.IsValid)
+                    throw new Exception("Cannot create ScanObject: mesh is null or invalid.");
+
+                if (!box.IsValid)
+                    throw new Exception("Cannot create ScanObject: box is invalid.");
+
+                mesh.FaceNormals.ComputeFaceNormals();
+                mesh.Normals.ComputeNormals();
+                mesh.Compact();
+
+                ScanObject obj =
+                    new ScanObject();
+
+                obj.Mesh =
+                    mesh;
+
+                obj.BoundingBox =
+                    box;
+
+                obj.ObjectPlane =
+                    box.Plane;
+
+                obj.Center =
+                    box.Center;
+
+                obj.SizeX =
+                    Math.Abs(box.X.Length);
+
+                obj.SizeY =
+                    Math.Abs(box.Y.Length);
+
+                obj.SizeZ =
+                    Math.Abs(box.Z.Length);
+
+                obj.BuildFaces();
+
+                return obj;
+            }
+
+            private void BuildFaces()
+            {
+                Faces.Clear();
+
+                Vector3d x =
+                    ObjectPlane.XAxis;
+
+                Vector3d y =
+                    ObjectPlane.YAxis;
+
+                Vector3d z =
+                    ObjectPlane.ZAxis;
+
+                x.Unitize();
+                y.Unitize();
+                z.Unitize();
+
+                Point3d posXCenter =
+                    BoundingBox.PointAt(
+                        1.0,
+                        0.5,
+                        0.5);
+
+                Point3d negXCenter =
+                    BoundingBox.PointAt(
+                        0.0,
+                        0.5,
+                        0.5);
+
+                Point3d posYCenter =
+                    BoundingBox.PointAt(
+                        0.5,
+                        1.0,
+                        0.5);
+
+                Point3d negYCenter =
+                    BoundingBox.PointAt(
+                        0.5,
+                        0.0,
+                        0.5);
+
+                Point3d posZCenter =
+                    BoundingBox.PointAt(
+                        0.5,
+                        0.5,
+                        1.0);
+
+                Point3d negZCenter =
+                    BoundingBox.PointAt(
+                        0.5,
+                        0.5,
+                        0.0);
+
+                // RIGHT / posX
+                Faces[(int)Sides.posX] =
+                    new ScanFace()
+                    {
+                        Center = posXCenter,
+                        Normal = x,
+                        UAxis = y,
+                        VAxis = z,
+                        Width = SizeY,
+                        Height = SizeZ
+                    };
+
+                // LEFT / negX
+                Faces[(int)Sides.negX] =
+                    new ScanFace()
+                    {
+                        Center = negXCenter,
+                        Normal = -x,
+                        UAxis = -y,
+                        VAxis = z,
+                        Width = SizeY,
+                        Height = SizeZ
+                    };
+
+                // BACK / posY
+                Faces[(int)Sides.posY] =
+                    new ScanFace()
+                    {
+                        Center = posYCenter,
+                        Normal = y,
+                        UAxis = -x,
+                        VAxis = z,
+                        Width = SizeX,
+                        Height = SizeZ
+                    };
+
+                // FRONT / negY
+                Faces[(int)Sides.negY] =
+                    new ScanFace()
+                    {
+                        Center = negYCenter,
+                        Normal = -y,
+                        UAxis = x,
+                        VAxis = z,
+                        Width = SizeX,
+                        Height = SizeZ
+                    };
+
+                // TOP / posZ
+                Faces[(int)Sides.posZ] =
+                    new ScanFace()
+                    {
+                        Center = posZCenter,
+                        Normal = z,
+                        UAxis = -x,
+                        VAxis = y,
+                        Width = SizeX,
+                        Height = SizeY
+                    };
+
+                // BOTTOM / negZ
+                Faces[(int)Sides.negZ] =
+                    new ScanFace()
+                    {
+                        Center = negZCenter,
+                        Normal = -z,
+                        UAxis = x,
+                        VAxis = -y,
+                        Width = SizeX,
+                        Height = SizeY
+                    };
+            }
+
+            public ScanFace GetFace(int sideId)
+            {
+                if (Faces.ContainsKey(sideId))
+                    return Faces[sideId];
+
+                return Faces[(int)Sides.posZ];
+            }
+
+            public Vector3d GetSideNormal(int sideId)
+            {
+                Vector3d n =
+                    GetFace(sideId).Normal;
+
+                n.Unitize();
+
+                return n;
+            }
+
+            public Vector3d GetSideUAxis(int sideId)
+            {
+                Vector3d u =
+                    GetFace(sideId).UAxis;
+
+                u.Unitize();
+
+                return u;
+            }
+
+            public string SideIdToKey(int sideId)
+            {
+                switch (sideId)
+                {
+                    case 0: return "posX";
+                    case 1: return "posY";
+                    case 2: return "negX";
+                    case 3: return "negY";
+                    case 4: return "posZ";
+                    case 5: return "negZ";
+                }
+
+                return "Unknown";
+            }
+
+            public int SideKeyToId(string key)
+            {
+                switch (key)
+                {
+                    case "posX": return (int)Sides.posX;
+                    case "posY": return (int)Sides.posY;
+                    case "negX": return (int)Sides.negX;
+                    case "negY": return (int)Sides.negY;
+                    case "posZ": return (int)Sides.posZ;
+                    case "negZ": return (int)Sides.negZ;
+                }
+
+                return -1;
+            }
+
+            public int ClassifyPointToSideId(Point3d p)
+            {
+                Vector3d q =
+                    p - ObjectPlane.Origin;
+
+                Vector3d xAxis =
+                    ObjectPlane.XAxis;
+
+                Vector3d yAxis =
+                    ObjectPlane.YAxis;
+
+                Vector3d zAxis =
+                    ObjectPlane.ZAxis;
+
+                xAxis.Unitize();
+                yAxis.Unitize();
+                zAxis.Unitize();
+
+                double x =
+                    q * xAxis;
+
+                double y =
+                    q * yAxis;
+
+                double z =
+                    q * zAxis;
+
+                double dPosX =
+                    Math.Abs(x - BoundingBox.X.Max);
+
+                double dNegX =
+                    Math.Abs(x - BoundingBox.X.Min);
+
+                double dPosY =
+                    Math.Abs(y - BoundingBox.Y.Max);
+
+                double dNegY =
+                    Math.Abs(y - BoundingBox.Y.Min);
+
+                double dPosZ =
+                    Math.Abs(z - BoundingBox.Z.Max);
+
+                double dNegZ =
+                    Math.Abs(z - BoundingBox.Z.Min);
+
+                double best =
+                    dPosX;
+
+                int side =
+                    (int)Sides.posX;
+
+                if (dPosY < best)
+                {
+                    best = dPosY;
+                    side = (int)Sides.posY;
+                }
+
+                if (dNegX < best)
+                {
+                    best = dNegX;
+                    side = (int)Sides.negX;
+                }
+
+                if (dNegY < best)
+                {
+                    best = dNegY;
+                    side = (int)Sides.negY;
+                }
+
+                if (dPosZ < best)
+                {
+                    best = dPosZ;
+                    side = (int)Sides.posZ;
+                }
+
+                if (dNegZ < best)
+                {
+                    best = dNegZ;
+                    side = (int)Sides.negZ;
+                }
+
+                return side;
+            }
+
+            // This preserves your original GH_ObjectPose image/pose order:
+            // 0 front, 1 back, 2 right, 3 left, 4 top, 5 bottom.
+            public List<ScanFace> GetObjectPoseFacesInOriginalOrder()
+            {
+                return new List<ScanFace>()
+                {
+                    GetFace((int)Sides.negY), // front
+                    GetFace((int)Sides.posY), // back
+                    GetFace((int)Sides.posX), // right
+                    GetFace((int)Sides.negX), // left
+                    GetFace((int)Sides.posZ), // top
+                    GetFace((int)Sides.negZ)  // bottom
+                };
+            }
+        }
         internal class RawDefectBranch
         {
             public int Index;
             public GH_Path Path;
+
+            public int PoseId;
+            public int SideId;
+            public int DefectId;
+
             public List<Point3d> Points;
             public BoundingBox BoundingBox;
             public Point3d Center;
@@ -46,7 +414,12 @@ namespace Mimikyu.Helper
         internal class MergedRegion
         {
             public List<int> RawBranchIndices = new List<int>();
+
+            public HashSet<int> SideIds = new HashSet<int>();
+
             public List<Point3d> Points = new List<Point3d>();
+
+            public Dictionary<int, List<Point3d>> PointsBySide = new Dictionary<int, List<Point3d>>();
         }
 
         public class HullVertex : IVertex
@@ -67,7 +440,172 @@ namespace Mimikyu.Helper
                 Index = index;
             }
         }
+        public enum RegionType
+        {
+            Surface,
+            Edge,
+            Corner
+        }
+        internal static Vector3d SideToNormal(int side)
+        {
+            switch (side)
+            {
+                case 0: return Vector3d.XAxis;
+                case 1: return Vector3d.YAxis;
+                case 2: return -Vector3d.XAxis;
+                case 3: return -Vector3d.YAxis;
+                case 4: return Vector3d.ZAxis;
+                case 5: return -Vector3d.ZAxis;
+            }
 
+            return Vector3d.ZAxis;
+        }
+
+        internal static RegionType GetRegionType(MergedRegion region)
+        {
+            int n = region.SideIds.Count;
+
+            if (n <= 1)
+                return RegionType.Surface;
+
+            if (n == 2)
+                return RegionType.Edge;
+
+            return RegionType.Corner;
+        }
+        internal static List<Vector3d> GetScanDirections(
+    MergedRegion region,
+    ScanObject scanObject)
+        {
+            List<Vector3d> dirs =
+                new List<Vector3d>();
+
+            if (region == null ||
+                scanObject == null ||
+                region.SideIds == null ||
+                region.SideIds.Count == 0)
+            {
+                dirs.Add(Vector3d.ZAxis);
+                return dirs;
+            }
+
+            RegionType type =
+                GetRegionType(region);
+
+            List<int> sideIds =
+                region.SideIds.ToList();
+
+            List<Vector3d> sideNormals =
+                new List<Vector3d>();
+
+            foreach (int sideId in sideIds)
+            {
+                Vector3d n =
+                    scanObject.GetSideNormal(sideId);
+
+                if (n.Unitize())
+                    sideNormals.Add(n);
+            }
+
+            if (sideNormals.Count == 0)
+            {
+                dirs.Add(Vector3d.ZAxis);
+                return dirs;
+            }
+
+            if (type == RegionType.Surface)
+            {
+                dirs.Add(sideNormals[0]);
+                return dirs;
+            }
+
+            if (type == RegionType.Edge &&
+                sideNormals.Count >= 2)
+            {
+                Vector3d edgeDir =
+                    sideNormals[0] +
+                    sideNormals[1];
+
+                if (edgeDir.Unitize())
+                    dirs.Add(edgeDir);
+
+                dirs.Add(sideNormals[0]);
+                dirs.Add(sideNormals[1]);
+
+                return dirs;
+            }
+
+            Vector3d cornerDir =
+                Vector3d.Zero;
+
+            foreach (Vector3d n in sideNormals)
+                cornerDir += n;
+
+            if (cornerDir.Unitize())
+                dirs.Add(cornerDir);
+
+            for (int i = 0;
+                 i < Math.Min(2, sideNormals.Count);
+                 i++)
+            {
+                dirs.Add(sideNormals[i]);
+            }
+
+            return dirs;
+        }
+
+        internal static List<Vector3d> CreateCrackViews(Vector3d mainDirection, Vector3d rotationAxis, double angleDeg)
+        {
+            List<Vector3d> dirs =
+                new List<Vector3d>();
+
+            if (!mainDirection.Unitize())
+                return dirs;
+
+            if (!rotationAxis.Unitize())
+            {
+                rotationAxis =
+                    Vector3d.CrossProduct(
+                        Vector3d.ZAxis,
+                        mainDirection);
+
+                if (!rotationAxis.Unitize())
+                    rotationAxis = Vector3d.XAxis;
+            }
+
+            dirs.Add(mainDirection);
+
+            Transform rotPlus =
+                Transform.Rotation(
+                    RhinoMath.ToRadians(angleDeg),
+                    rotationAxis,
+                    Point3d.Origin);
+
+            Transform rotMinus =
+                Transform.Rotation(
+                    RhinoMath.ToRadians(-angleDeg),
+                    rotationAxis,
+                    Point3d.Origin);
+
+            Vector3d plus =
+                mainDirection;
+
+            plus.Transform(rotPlus);
+
+            if (plus.Unitize())
+                dirs.Add(plus);
+
+            Vector3d minus =
+                mainDirection;
+
+            minus.Transform(rotMinus);
+
+            if (minus.Unitize())
+                dirs.Add(minus);
+
+            return dirs;
+        }
+        
         public static Mesh BrepToSingleMesh(Brep brep)
         {
             Mesh[] meshes = Mesh.CreateFromBrep(brep, MeshingParameters.Default);
@@ -213,6 +751,9 @@ namespace Mimikyu.Helper
                 branch.Points = pts;
                 branch.BoundingBox = bb;
                 branch.Center = bb.Center;
+                branch.PoseId = path.Indices[0];
+                branch.SideId = path.Indices[1];
+                branch.DefectId = path.Indices[2];
 
                 branches.Add(branch);
             }
@@ -314,14 +855,73 @@ namespace Mimikyu.Helper
                         new MergedRegion();
                 }
 
-                regionMap[root].RawBranchIndices.Add(
-                    branches[i].Index);
+                regionMap[root].RawBranchIndices.Add(branches[i].Index);
 
-                regionMap[root].Points.AddRange(
+                regionMap[root].Points.AddRange(branches[i].Points);
+
+                regionMap[root].SideIds.Add(branches[i].SideId);
+
+                if (!regionMap[root].PointsBySide.ContainsKey(branches[i].SideId))
+                {
+                    regionMap[root].PointsBySide[branches[i].SideId] =
+                        new List<Point3d>();
+                }
+
+                regionMap[root].PointsBySide[branches[i].SideId].AddRange(
                     branches[i].Points);
             }
 
             return regionMap.Values.ToList();
+        }
+        internal static Vector3d AverageMeshNormalFromPoints(
+    Mesh mesh,
+    List<Point3d> pts,
+    Vector3d fallbackNormal)
+        {
+            if (mesh == null || !mesh.IsValid || pts == null || pts.Count == 0)
+                return fallbackNormal;
+
+            mesh.FaceNormals.ComputeFaceNormals();
+
+            Vector3d sum =
+                Vector3d.Zero;
+
+            int count = 0;
+
+            foreach (Point3d p in pts)
+            {
+                MeshPoint mp =
+                    mesh.ClosestMeshPoint(
+                        p,
+                        double.MaxValue);
+
+                if (mp == null)
+                    continue;
+
+                int faceId =
+                    mp.FaceIndex;
+
+                if (faceId < 0 || faceId >= mesh.FaceNormals.Count)
+                    continue;
+
+                Vector3d n =
+                    mesh.FaceNormals[faceId];
+
+                if (!n.Unitize())
+                    continue;
+
+                // Keep normals consistently oriented before averaging.
+                if (count > 0 && sum * n < 0.0)
+                    n = -n;
+
+                sum += n;
+                count++;
+            }
+
+            if (count == 0 || !sum.Unitize())
+                return fallbackNormal;
+
+            return sum;
         }
 
         private static bool BoundingBoxesOverlap(
