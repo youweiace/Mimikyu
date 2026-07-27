@@ -87,7 +87,7 @@ namespace Mimikyu._1_PC_Robot
             for (int row = 0; row < rows.Count; row++)
             {
                 var rowPlanes = rows[row]
-                    .OrderBy(p => p.OriginX)
+                    .OrderByDescending(p => p.OriginZ)
                     .ToList();
 
                 if (row % 2 == 1)
