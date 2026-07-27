@@ -711,8 +711,8 @@ namespace Mimikyu.Helper
 
             return new Plane(
                 camPos,
-                -xAxis,
-                -yAxis);
+                xAxis,
+                yAxis);
         }
 
         // ====================================================================
