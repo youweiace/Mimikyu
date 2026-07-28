@@ -103,11 +103,11 @@ namespace Mimikyu._1_PC_Robot
                     Plane p = serpentinePlanes[i];
                     if (p.OriginZ < cameraBase.Z && p.OriginY > cameraBase.Y)
                     {
-                        p.Rotate(Math.PI*0.5, p.ZAxis);
+                        p.Rotate(Math.PI*0.95, p.ZAxis);
                     }
                     else if (p.OriginZ < cameraBase.Z && p.OriginY < cameraBase.Y)
                     {
-                        p.Rotate(-Math.PI*0.5, p.ZAxis);
+                        p.Rotate(-Math.PI*0.95, p.ZAxis);
                     }
                     serpentinePlanes[i] = p;
 
