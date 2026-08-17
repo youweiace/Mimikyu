@@ -1,5 +1,6 @@
 ﻿using Grasshopper;
 using Grasshopper.Kernel;
+using Grasshopper.Kernel.Components;
 using Grasshopper.Kernel.Data;
 using Rhino;
 using Rhino.Geometry;
@@ -29,7 +30,7 @@ namespace Mimikyu._1_PC_Robot
         /// </summary>
         protected override void RegisterInputParams(GH_Component.GH_InputParamManager pManager)
         {
-            pManager.AddBrepParameter("Object", "Obj", "Object to define scan area", GH_ParamAccess.item);
+            pManager.AddBrepParameter("Object", "Obj", "Object to define scan area", GH_ParamAccess.list);
             pManager.AddNumberParameter("Capture Width", "W", "Width of the capture area in mm", GH_ParamAccess.item, 428);
             pManager.AddNumberParameter("Capture Height", "H", "Height of the capture area in mm", GH_ParamAccess.item, 330);
             pManager.AddNumberParameter("Distance", "D", "Distance from the object to the camera in mm", GH_ParamAccess.item, 500);
@@ -50,8 +51,8 @@ namespace Mimikyu._1_PC_Robot
         protected override void RegisterOutputParams(GH_Component.GH_OutputParamManager pManager)
         {
             pManager.AddPlaneParameter("Poses", "P", "Pose as Planes", GH_ParamAccess.tree);
-            pManager.AddBoxParameter("Box", "B", "Box", GH_ParamAccess.item);
-            pManager.AddGenericParameter("Scan Object","SO","Shared scan object definition for downstream defect projection and defect scanning",GH_ParamAccess.item);
+            pManager.AddBoxParameter("Box", "B", "Box", GH_ParamAccess.list);
+            pManager.AddGenericParameter("Scan Object","SO","Shared scan object definition for downstream defect projection and defect scanning",GH_ParamAccess.list);
         }
 
         /// <summary>
@@ -60,7 +61,7 @@ namespace Mimikyu._1_PC_Robot
         /// <param name="DA">The DA object is used to retrieve from inputs and store in outputs.</param>
         protected override void SolveInstance(IGH_DataAccess DA)
         {
-            Brep inGeo = default;
+            List<Brep> inGeoList = new List<Brep>();
             double CaptureW = default;
             double CaptureH = default;
             double Distance = default;
@@ -71,7 +72,7 @@ namespace Mimikyu._1_PC_Robot
 
             DataTree<Plane> planeTree = new DataTree<Plane>();
 
-            if (!DA.GetData(0, ref inGeo)) return;
+            if (!DA.GetDataList(0, inGeoList)) return;
             if (!DA.GetData(1, ref CaptureW)) return;
             if (!DA.GetData(2, ref CaptureH)) return;
             if (!DA.GetData(3, ref Distance)) return;
@@ -79,370 +80,374 @@ namespace Mimikyu._1_PC_Robot
             if (!DA.GetData(5, ref mode)) return;
             if (!DA.GetData(6, ref marginBuffer)) return;
 
-            ScanObject scanObject =
-                ScanObject.FromBrep(inGeo);
-
-            Mesh mesh =
-                scanObject.Mesh;
-
-            Box obb =
-                scanObject.BoundingBox;
-
-            Plane objectPlane =
-                scanObject.ObjectPlane;
-
-            double sx =
-                scanObject.SizeX;
-
-            double sy =
-                scanObject.SizeY;
-
-            double sz =
-                scanObject.SizeZ;
-
-            Point3d center =
-                scanObject.Center;
-
-            if (intrinsicsPath != null)
+            List<Box> obbList = new List<Box>();
+            List<ScanObject> scanObjects = new List<ScanObject>();
+            for (int g = 0; g < inGeoList.Count; g++)
             {
-                CameraIntrinsics K = LoadIntrinsics(intrinsicsPath);
+                ScanObject scanObject =
+                    ScanObject.FromBrep(inGeoList[g]);
+                scanObjects.Add(scanObject);
 
-                double imageWidth = K.image_width;
-                double imageHeight = K.image_height;
+                Mesh mesh =
+                    scanObject.Mesh;
 
-                double fx = K.camera_matrix.fx;
-                double fy = K.camera_matrix.fy;
+                Box obb =
+                    scanObject.BoundingBox;
 
-                double distanceW =
-                    CaptureW * fx / imageWidth;
+                obbList.Add(obb);
 
-                double distanceH =
-                    CaptureH * fy / imageHeight;
+                Plane objectPlane =
+                    scanObject.ObjectPlane;
 
-                Distance = Math.Max(distanceW, distanceH);
+                double sx =
+                    scanObject.SizeX;
 
-                CaptureW = Distance * imageWidth / fx;
-                CaptureH = Distance * imageHeight / fy;
-            }
+                double sy =
+                    scanObject.SizeY;
 
-            switch (mode)
-            {
-                case 0:
+                double sz =
+                    scanObject.SizeZ;
 
-                    List<ScanFace> faces =
-                        scanObject.GetObjectPoseFacesInOriginalOrder();
+                Point3d center =
+                    scanObject.Center;
+
+                if (intrinsicsPath != null)
+                {
+                    CameraIntrinsics K = LoadIntrinsics(intrinsicsPath);
+
+                    double imageWidth = K.image_width;
+                    double imageHeight = K.image_height;
+
+                    double fx = K.camera_matrix.fx;
+                    double fy = K.camera_matrix.fy;
+
+                    double distanceW =
+                        CaptureW * fx / imageWidth;
+
+                    double distanceH =
+                        CaptureH * fy / imageHeight;
+
+                    Distance = Math.Max(distanceW, distanceH);
+
+                    CaptureW = Distance * imageWidth / fx;
+                    CaptureH = Distance * imageHeight / fy;
+                }
+
+                switch (mode)
+                {
+                    case 0:
+
+                        List<ScanFace> faces =
+                            scanObject.GetObjectPoseFacesInOriginalOrder();
 
 
-                    double stepU = CaptureW * (1.0 - Overlap);
-                    double stepV = CaptureH * (1.0 - Overlap);
+                        double stepU = CaptureW * (1.0 - Overlap);
+                        double stepV = CaptureH * (1.0 - Overlap);
 
-                    for (int f = 0; f < faces.Count; f++)
-                    {
-                        ScanFace face = faces[f];
-
-                        int countU = Math.Max(1,
-                            (int)Math.Ceiling(face.Width / stepU));
-
-                        int countV = Math.Max(1,
-                            (int)Math.Ceiling(face.Height / stepV));
-
-                        for (int row = 0; row < countV; row++)
+                        for (int f = 0; f < faces.Count; f++)
                         {
-                            bool reverse = (row % 2 == 1);
+                            ScanFace face = faces[f];
 
-                            for (int colIter = 0; colIter < countU; colIter++)
+                            int countU = Math.Max(1,
+                                (int)Math.Ceiling(face.Width / stepU));
+
+                            int countV = Math.Max(1,
+                                (int)Math.Ceiling(face.Height / stepV));
+
+                            for (int row = 0; row < countV; row++)
                             {
-                                int col = reverse
-                                    ? countU - 1 - colIter
-                                    : colIter;
+                                bool reverse = (row % 2 == 1);
 
-                                double u;
-                                double v;
+                                for (int colIter = 0; colIter < countU; colIter++)
+                                {
+                                    int col = reverse
+                                        ? countU - 1 - colIter
+                                        : colIter;
 
-                                double marginU =
-                                    Math.Min(
-                                        0.49,
-                                        (CaptureH * (0.5 - marginBuffer)) / face.Width);
+                                    double u;
+                                    double v;
 
-                                double marginV =
-                                    Math.Min(
-                                        0.49,
-                                        (CaptureW * (0.5 - marginBuffer)) / face.Height);
+                                    double marginU =
+                                        Math.Min(
+                                            0.49,
+                                            (CaptureH * (0.5 - marginBuffer)) / face.Width);
 
-                                if (countU == 1)
-                                    u = 0.5;
-                                else
-                                    u =
-                                        marginU +
-                                        ((double)col / (countU - 1)) *
-                                        (1.0 - 2.0 * marginU);
+                                    double marginV =
+                                        Math.Min(
+                                            0.49,
+                                            (CaptureW * (0.5 - marginBuffer)) / face.Height);
 
-                                if (countV == 1)
-                                    v = 0.5;
-                                else
-                                    v =
-                                        marginV +
-                                        ((double)row / (countV - 1)) *
-                                        (1.0 - 2.0 * marginV);
+                                    if (countU == 1)
+                                        u = 0.5;
+                                    else
+                                        u =
+                                            marginU +
+                                            ((double)col / (countU - 1)) *
+                                            (1.0 - 2.0 * marginU);
 
-
-                                Point3d facePoint = face.PointAt(u, v);
-
-                                Point3d camOrigin =
-                                    facePoint + face.Normal * Distance;
-
-                                Vector3d zAxis = face.Normal;
-                                zAxis.Unitize();
-
-                                Vector3d xAxis = face.UAxis;
-                                xAxis.Unitize();
-
-                                Vector3d yAxis =
-                                    Vector3d.CrossProduct(zAxis, xAxis);
-                                yAxis.Unitize();
-
-                                xAxis =
-                                    Vector3d.CrossProduct(yAxis, zAxis);
-                                xAxis.Unitize();
-
-                                Plane camPlane =
-                                    new Plane(camOrigin, xAxis, yAxis);
-
-                                GH_Path path = new GH_Path(f);
-                                planeTree.Add(camPlane, path);
+                                    if (countV == 1)
+                                        v = 0.5;
+                                    else
+                                        v =
+                                            marginV +
+                                            ((double)row / (countV - 1)) *
+                                            (1.0 - 2.0 * marginV);
 
 
+                                    Point3d facePoint = face.PointAt(u, v);
+
+                                    Point3d camOrigin =
+                                        facePoint + face.Normal * Distance;
+
+                                    Vector3d zAxis = face.Normal;
+                                    zAxis.Unitize();
+
+                                    Vector3d xAxis = face.UAxis;
+                                    xAxis.Unitize();
+
+                                    Vector3d yAxis =
+                                        Vector3d.CrossProduct(zAxis, xAxis);
+                                    yAxis.Unitize();
+
+                                    xAxis =
+                                        Vector3d.CrossProduct(yAxis, zAxis);
+                                    xAxis.Unitize();
+
+                                    Plane camPlane =
+                                        new Plane(camOrigin, xAxis, yAxis);
+
+                                    GH_Path path = new GH_Path(f);
+                                    planeTree.Add(camPlane, path);
+
+                                }
                             }
                         }
-                    }
-                    break;
+                        break;
 
-                case 1:
+                    case 1:
 
-                    // Optional angle input later
-                    double ObliqueAngleDeg = 45.0;
+                        // Optional angle input later
+                        double ObliqueAngleDeg = 45.0;
 
-                    // ------------------------------------------------------------
-                    // OBB dimensions and axes
-                    // ------------------------------------------------------------
+                        // ------------------------------------------------------------
+                        // OBB dimensions and axes
+                        // ------------------------------------------------------------
 
-                    double[] sizes =
-                    {
-                        sx,
-                        sy,
-                        sz
-                    };
-
-                    Vector3d[] axes =
-                    {
-                        objectPlane.XAxis,
-                        objectPlane.YAxis,
-                        objectPlane.ZAxis
-                    };
-
-                    for (int i = 0; i < 3; i++)
-                        axes[i].Unitize();
-
-
-                    // ------------------------------------------------------------
-                    // Find which OBB axis is most vertical
-                    // ------------------------------------------------------------
-
-                    double[] zAlign =
-                    {
-                        Math.Abs(axes[0] * Vector3d.ZAxis),
-                        Math.Abs(axes[1] * Vector3d.ZAxis),
-                        Math.Abs(axes[2] * Vector3d.ZAxis)
-                    };
-
-                    int verticalId = 0;
-
-                    if (zAlign[1] > zAlign[verticalId])
-                        verticalId = 1;
-
-                    if (zAlign[2] > zAlign[verticalId])
-                        verticalId = 2;
-
-
-                    // ------------------------------------------------------------
-                    // Remaining 2 axes
-                    // ------------------------------------------------------------
-
-                    List<int> remaining = new List<int>();
-
-                    for (int i = 0; i < 3; i++)
-                    {
-                        if (i != verticalId)
-                            remaining.Add(i);
-                    }
-
-                    int idA = remaining[0];
-                    int idB = remaining[1];
-
-
-                    // ------------------------------------------------------------
-                    // Longest horizontal axis = scan direction
-                    // Other horizontal axis = side direction
-                    // ------------------------------------------------------------
-
-                    int longId;
-                    int sideId;
-
-                    if (sizes[idA] >= sizes[idB])
-                    {
-                        longId = idA;
-                        sideId = idB;
-                    }
-                    else
-                    {
-                        longId = idB;
-                        sideId = idA;
-                    }
-
-
-                    // ------------------------------------------------------------
-                    // Final object-aligned frame
-                    // ------------------------------------------------------------
-
-                    Vector3d lengthAxis = axes[longId];
-                    Vector3d sideAxis = axes[sideId];
-                    Vector3d verticalAxis = axes[verticalId];
-
-                    lengthAxis.Unitize();
-                    sideAxis.Unitize();
-                    verticalAxis.Unitize();
-
-
-                    // Flip object Z upward if needed
-                    if (verticalAxis * Vector3d.ZAxis < 0)
-                    {
-                        verticalAxis = -verticalAxis;
-                    }
-
-
-                    // Rebuild frame orthogonally
-                    sideAxis = Vector3d.CrossProduct(verticalAxis, lengthAxis);
-                    sideAxis.Unitize();
-
-                    lengthAxis = Vector3d.CrossProduct(sideAxis, verticalAxis);
-                    lengthAxis.Unitize();
-
-
-                    // Keep directions consistent
-                    if (lengthAxis * axes[longId] < 0)
-                        lengthAxis = -lengthAxis;
-
-                    if (sideAxis * axes[sideId] < 0)
-                        sideAxis = -sideAxis;
-
-
-                    // Dimensions
-                    double length = sizes[longId];
-                    double sideWidth = sizes[sideId];
-                    double height = sizes[verticalId];
-
-
-                    // ------------------------------------------------------------
-                    // Oblique directions
-                    // ------------------------------------------------------------
-
-                    double angle = RhinoMath.ToRadians(ObliqueAngleDeg);
-
-                    Vector3d leftDir =
-                          verticalAxis * Math.Sin(angle)
-                        - sideAxis * Math.Cos(angle);
-
-                    Vector3d rightDir =
-                          verticalAxis * Math.Sin(angle)
-                        + sideAxis * Math.Cos(angle);
-
-                    leftDir.Unitize();
-                    rightDir.Unitize();
-
-                    // ------------------------------------------------------------
-                    // Number of positions along object length
-                    // ------------------------------------------------------------
-
-
-
-                    double step =
-                        CaptureW * (1.0 - Overlap);
-
-                    int count =
-                        Math.Max(
-                            1,
-                            (int)Math.Ceiling(length / step));
-
-
-                    // ------------------------------------------------------------
-                    // Top scan line
-                    // ------------------------------------------------------------
-
-                    Point3d upCenter =
-                        center +
-                        verticalAxis * (height * 0.5);
-
-                    // ------------------------------------------------------------
-                    // Generate scan targets and camera planes
-                    // ------------------------------------------------------------
-
-                    GH_Path leftPath = new GH_Path(0);
-                    GH_Path rightPath = new GH_Path(1);
-
-                    double margin =
-                        Math.Min(
-                            0.49,
-                            (CaptureW * (0.5 - marginBuffer)) / length);
-
-                    for (int i = 0; i < count; i++)
-                    {
-                        double t;
-
-                        if (count == 1)
+                        double[] sizes =
                         {
-                            t = 0.5;
+                            sx,
+                            sy,
+                            sz
+                        };
+
+                        Vector3d[] axes =
+                        {
+                            objectPlane.XAxis,
+                            objectPlane.YAxis,
+                            objectPlane.ZAxis
+                        };
+
+                        for (int i = 0; i < 3; i++)
+                            axes[i].Unitize();
+
+
+                        // ------------------------------------------------------------
+                        // Find which OBB axis is most vertical
+                        // ------------------------------------------------------------
+
+                        double[] zAlign =
+                        {
+                            Math.Abs(axes[0] * Vector3d.ZAxis),
+                            Math.Abs(axes[1] * Vector3d.ZAxis),
+                            Math.Abs(axes[2] * Vector3d.ZAxis)
+                        };
+
+                        int verticalId = 0;
+
+                        if (zAlign[1] > zAlign[verticalId])
+                            verticalId = 1;
+
+                        if (zAlign[2] > zAlign[verticalId])
+                            verticalId = 2;
+
+
+                        // ------------------------------------------------------------
+                        // Remaining 2 axes
+                        // ------------------------------------------------------------
+
+                        List<int> remaining = new List<int>();
+
+                        for (int i = 0; i < 3; i++)
+                        {
+                            if (i != verticalId)
+                                remaining.Add(i);
+                        }
+
+                        int idA = remaining[0];
+                        int idB = remaining[1];
+
+
+                        // ------------------------------------------------------------
+                        // Longest horizontal axis = scan direction
+                        // Other horizontal axis = side direction
+                        // ------------------------------------------------------------
+
+                        int longId;
+                        int sideId;
+
+                        if (sizes[idA] >= sizes[idB])
+                        {
+                            longId = idA;
+                            sideId = idB;
                         }
                         else
                         {
-                            t =
-                                margin +
-                                ((double)i / (count - 1)) *
-                                (1.0 - 2.0 * margin);
+                            longId = idB;
+                            sideId = idA;
                         }
 
-                        Point3d target =
+
+                        // ------------------------------------------------------------
+                        // Final object-aligned frame
+                        // ------------------------------------------------------------
+
+                        Vector3d lengthAxis = axes[longId];
+                        Vector3d sideAxis = axes[sideId];
+                        Vector3d verticalAxis = axes[verticalId];
+
+                        lengthAxis.Unitize();
+                        sideAxis.Unitize();
+                        verticalAxis.Unitize();
+
+
+                        // Flip object Z upward if needed
+                        if (verticalAxis * Vector3d.ZAxis < 0)
+                        {
+                            verticalAxis = -verticalAxis;
+                        }
+
+
+                        // Rebuild frame orthogonally
+                        sideAxis = Vector3d.CrossProduct(verticalAxis, lengthAxis);
+                        sideAxis.Unitize();
+
+                        lengthAxis = Vector3d.CrossProduct(sideAxis, verticalAxis);
+                        lengthAxis.Unitize();
+
+
+                        // Keep directions consistent
+                        if (lengthAxis * axes[longId] < 0)
+                            lengthAxis = -lengthAxis;
+
+                        if (sideAxis * axes[sideId] < 0)
+                            sideAxis = -sideAxis;
+
+
+                        // Dimensions
+                        double length = sizes[longId];
+                        double sideWidth = sizes[sideId];
+                        double height = sizes[verticalId];
+
+
+                        // ------------------------------------------------------------
+                        // Oblique directions
+                        // ------------------------------------------------------------
+
+                        double angle = RhinoMath.ToRadians(ObliqueAngleDeg);
+
+                        Vector3d leftDir =
+                              verticalAxis * Math.Sin(angle)
+                            - sideAxis * Math.Cos(angle);
+
+                        Vector3d rightDir =
+                              verticalAxis * Math.Sin(angle)
+                            + sideAxis * Math.Cos(angle);
+
+                        leftDir.Unitize();
+                        rightDir.Unitize();
+
+                        // ------------------------------------------------------------
+                        // Number of positions along object length
+                        // ------------------------------------------------------------
+
+
+
+                        double step =
+                            CaptureW * (1.0 - Overlap);
+
+                        int count =
+                            Math.Max(
+                                1,
+                                (int)Math.Ceiling(length / step));
+
+
+                        // ------------------------------------------------------------
+                        // Top scan line
+                        // ------------------------------------------------------------
+
+                        Point3d upCenter =
                             center +
-                            lengthAxis * ((t - 0.5) * length);
+                            verticalAxis * (height * 0.5);
+
+                        // ------------------------------------------------------------
+                        // Generate scan targets and camera planes
+                        // ------------------------------------------------------------
+
+                        GH_Path leftPath = new GH_Path(g, 0);
+                        GH_Path rightPath = new GH_Path(g, 1);
+
+                        double margin =
+                            Math.Min(
+                                0.49,
+                                (CaptureW * (0.5 - marginBuffer)) / length);
+
+                        for (int i = 0; i < count; i++)
+                        {
+                            double t;
+
+                            if (count == 1)
+                            {
+                                t = 0.5;
+                            }
+                            else
+                            {
+                                t =
+                                    margin +
+                                    ((double)i / (count - 1)) *
+                                    (1.0 - 2.0 * margin);
+                            }
+
+                            Point3d target =
+                                center +
+                                lengthAxis * ((t - 0.5) * length);
 
 
-                        Plane leftPlane =
-                            CreateCameraPlane(
-                                target,
-                                leftDir,
-                                Distance,
-                                lengthAxis);
+                            Plane leftPlane =
+                                CreateCameraPlane(
+                                    target,
+                                    leftDir,
+                                    Distance,
+                                    lengthAxis);
 
-                        Plane rightPlane =
-                            CreateCameraPlane(
-                                target,
-                                rightDir,
-                                Distance,
-                                lengthAxis);
+                            Plane rightPlane =
+                                CreateCameraPlane(
+                                    target,
+                                    rightDir,
+                                    Distance,
+                                    lengthAxis);
 
-                        planeTree.Add(leftPlane, leftPath);
-                        planeTree.Add(rightPlane, rightPath);
-                    }
-
-
-
-                    break;
-                case 2:
-                    break;
+                            planeTree.Add(leftPlane, leftPath);
+                            planeTree.Add(rightPlane, rightPath);
+                        }
+                        break;
+                    case 2:
+                        break;
+                }
             }
 
             DA.SetDataTree(0, planeTree);
-            DA.SetData(1, obb);
-            DA.SetData(2, scanObject);
+            DA.SetDataList(1, obbList);
+            DA.SetDataList(2, scanObjects);
         }
        
 
