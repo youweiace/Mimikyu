@@ -397,19 +397,6 @@ namespace Mimikyu.Helper
                 };
             }
         }
-        internal class RawDefectBranch
-        {
-            public int Index;
-            public GH_Path Path;
-
-            public int PoseId;
-            public int SideId;
-            public int DefectId;
-
-            public List<Point3d> Points;
-            public BoundingBox BoundingBox;
-            public Point3d Center;
-        }
 
         internal class MergedRegion
         {
@@ -715,6 +702,20 @@ namespace Mimikyu.Helper
                 yAxis);
         }
 
+        internal class RawDefectBranch
+        {
+            public int Index;
+            public GH_Path Path;
+
+            public int PieceId;
+            public int PoseId;
+            public int SideId;
+            public int DefectId;
+
+            public List<Point3d> Points;
+            public BoundingBox BoundingBox;
+            public Point3d Center;
+        }
         // ====================================================================
         // Step 1: Read defect branches
         // ====================================================================
@@ -751,9 +752,10 @@ namespace Mimikyu.Helper
                 branch.Points = pts;
                 branch.BoundingBox = bb;
                 branch.Center = bb.Center;
-                branch.PoseId = path.Indices[0];
-                branch.SideId = path.Indices[1];
-                branch.DefectId = path.Indices[2];
+                branch.PieceId = path.Indices[0];
+                branch.PoseId = path.Indices[1];
+                branch.SideId = path.Indices[2];
+                branch.DefectId = path.Indices[3];
 
                 branches.Add(branch);
             }
