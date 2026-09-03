@@ -81,6 +81,26 @@ namespace Mimikyu.Polyga
 
                     return;
                 }
+
+                // Validate mesh integrity
+                if (scanObject.Mesh == null || !scanObject.Mesh.IsValid)
+                {
+                    AddRuntimeMessage(
+                        GH_RuntimeMessageLevel.Error,
+                        "ScanObject contains an invalid mesh.");
+
+                    return;
+                }
+
+                // Validate object plane
+                if (!scanObject.ObjectPlane.IsValid)
+                {
+                    AddRuntimeMessage(
+                        GH_RuntimeMessageLevel.Error,
+                        "ScanObject contains an invalid object plane.");
+
+                    return;
+                }
             }
 
 

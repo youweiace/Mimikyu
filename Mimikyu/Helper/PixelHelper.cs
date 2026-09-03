@@ -334,6 +334,28 @@ namespace Mimikyu.Helper
                     faceIndex = faceIds[0];
                 }
 
+                // Snap hitPoint to the actual mesh face to ensure it's precisely on the surface
+                if (faceIndex >= 0 && faceIndex < objectMesh.Faces.Count)
+                {
+                    MeshFace face = objectMesh.Faces[faceIndex];
+                    Point3d v0 = objectMesh.Vertices[face.A];
+                    Point3d v1 = objectMesh.Vertices[face.B];
+                    Point3d v2 = objectMesh.Vertices[face.C];
+
+                    // Project hitPoint onto the triangle plane
+                    Point3d snappedPoint = Point3d.Unset;
+                    if (Plane.FitPlaneToPoints(new List<Point3d> { v0, v1, v2 }, out Plane facePlane) == PlaneFitResult.Success)
+                    {
+                        snappedPoint = facePlane.ClosestPoint(hitPoint);
+                    }
+
+                    // Use snapped point if available, otherwise keep original
+                    if (snappedPoint.IsValid)
+                    {
+                        hitPoint = snappedPoint;
+                    }
+                }
+
                 Vector3d normal =
                     Vector3d.Unset;
 
@@ -343,6 +365,19 @@ namespace Mimikyu.Helper
                         objectMesh.FaceNormals[faceIndex];
 
                     normal.Unitize();
+                }
+
+                // Validate that the normal is facing towards the camera (not back-facing)
+                // If back-facing, this might indicate a mesh orientation issue
+                Vector3d rayDirection = ray.Direction;
+                double dotProduct = Vector3d.Multiply(normal, rayDirection);
+
+                // Only accept hits where normal is facing towards camera (negative dot product)
+                // This ensures we're hitting the "outside" of the mesh
+                if (dotProduct >= 0)
+                {
+                    // Back-facing normal - skip this hit
+                    continue;
                 }
 
                 string sideKey =
