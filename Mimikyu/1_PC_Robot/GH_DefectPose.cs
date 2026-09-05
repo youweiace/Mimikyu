@@ -38,6 +38,7 @@ namespace Mimikyu
             pManager.AddNumberParameter("Merge Distance", "Md", "Distance in mm used to merge nearby defect branches into one scan region", GH_ParamAccess.item, 330.0);
             pManager.AddIntegerParameter("Max Hull Points","Mh","Maximum number of points used to compute the convex hull per merged region.", GH_ParamAccess.item,120);
             pManager.AddNumberParameter("3D Threshold","T3D","If the smallest OBB dimension is larger than this value, the region is marked as 3D/non-planar.", GH_ParamAccess.item,20.0);
+            pManager.AddNumberParameter("Tilt Angle", "A", "Additional scan angle on each side of the surface-normal scan, in degrees.", GH_ParamAccess.item, 10.0);
 
             pManager[2].Optional = true;
             pManager[3].Optional = true;
@@ -46,6 +47,7 @@ namespace Mimikyu
             pManager[6].Optional = true;
             pManager[7].Optional = true;
             pManager[8].Optional = true;
+            pManager[9].Optional = true;
         }
 
         /// <summary>
@@ -79,6 +81,8 @@ namespace Mimikyu
             double mergeDistance = 330.0;
             int maxHullPoints = 120;
             double threeDThreshold = 5.0;
+            double tiltAngleDegrees = 10.0;
+
 
             if (!DA.GetDataList(0, scanObjects)) return;
 
@@ -106,6 +110,7 @@ namespace Mimikyu
             DA.GetData(6, ref mergeDistance);
             DA.GetData(7, ref maxHullPoints);
             DA.GetData(8, ref threeDThreshold);
+            DA.GetData(9, ref tiltAngleDegrees);
 
             if (defectTree == null || defectTree.PathCount == 0)
             {
@@ -158,6 +163,7 @@ namespace Mimikyu
                 maxHullPoints = Math.Max(20, maxHullPoints);
 
                 overlap = Math.Max(0.0, Math.Min(0.9, overlap));
+                tiltAngleDegrees = Math.Max( 0.0, Math.Min(45.0, Math.Abs(tiltAngleDegrees)));
 
                 double stepU = captureW * (1.0 - overlap);
                 double stepV = captureH * (1.0 - overlap);
@@ -459,12 +465,15 @@ namespace Mimikyu
                                     t[2]);
 
                             Point3d surfaceTarget;
-                            Vector3d ignoredNormal;
+                            Vector3d surfaceNormal;
 
                             Vector3d preferredSnapNormal =
                                 scanDirections.Count > 0
                                 ? scanDirections[0]
                                 : boxNormal;
+
+                            if (!preferredSnapNormal.Unitize())
+                                preferredSnapNormal = boxNormal;
 
                             bool okSurface =
                                 ProjectPointToMeshSurface(
@@ -472,7 +481,7 @@ namespace Mimikyu
                                     roughTarget,
                                     preferredSnapNormal,
                                     out surfaceTarget,
-                                    out ignoredNormal);
+                                    out surfaceNormal);
 
                             if (!okSurface)
                             {
@@ -484,44 +493,97 @@ namespace Mimikyu
                                 continue;
                             }
 
+                            // --------------------------------------------------------
+                            // Construct three views from the actual local mesh normal:
+                            // 1. Perpendicular to surface
+                            // 2. Tilted -A degrees
+                            // 3. Tilted +A degrees
+                            // --------------------------------------------------------
+
+                            if (!surfaceNormal.Unitize())
+                            {
+                                infoTree.Add(
+                                    "Skipped one target in region " + r +
+                                    ": invalid surface normal.",
+                                    outPath);
+
+                                continue;
+                            }
+
+                            // Mesh normals can point inward or outward depending on the
+                            // mesh orientation. Align the local surface normal with the
+                            // expected outward scan direction for this object side.
+                            Vector3d expectedOutwardDirection =
+                                preferredSnapNormal;
+
+                            if (!expectedOutwardDirection.Unitize())
+                                expectedOutwardDirection = boxNormal;
+
+                            if (expectedOutwardDirection.Unitize())
+                            {
+                                if (surfaceNormal * expectedOutwardDirection < 0.0)
+                                    surfaceNormal.Reverse();
+                            }
+
+                            // Create a stable local horizontal axis projected onto the
+                            // tangent plane at the current surface target.
+                            Vector3d localXAxis =
+                                ProjectVectorToPlane(
+                                    preferredXAxis,
+                                    surfaceNormal);
+
+                            if (!localXAxis.Unitize())
+                            {
+                                localXAxis =
+                                    ProjectVectorToPlane(
+                                        uAxis,
+                                        surfaceNormal);
+                            }
+
+                            // Final fallback if preferredXAxis and uAxis are both nearly
+                            // parallel to the surface normal.
+                            if (!localXAxis.Unitize())
+                            {
+                                localXAxis =
+                                    CreatePerpendicularVector(
+                                        surfaceNormal);
+                            }
+
+                            if (!localXAxis.Unitize())
+                            {
+                                infoTree.Add(
+                                    "Skipped one target in region " + r +
+                                    ": could not construct local scan X axis.",
+                                    outPath);
+
+                                continue;
+                            }
+
+                            // The vertical tangent direction is used as the rotation axis.
+                            // Rotating around this axis produces left/right side views.
+                            Vector3d tiltAxis =
+                                Vector3d.CrossProduct(
+                                    surfaceNormal,
+                                    localXAxis);
+
+                            if (!tiltAxis.Unitize())
+                            {
+                                infoTree.Add(
+                                    "Skipped one target in region " + r +
+                                    ": could not construct tilt axis.",
+                                    outPath);
+
+                                continue;
+                            }
+
                             List<Vector3d> finalViewDirections =
-                                new List<Vector3d>();
+                                CreateSurfaceNormalViews(
+                                    surfaceNormal,
+                                    tiltAxis,
+                                    tiltAngleDegrees);
 
-                            if (regionType == RegionType.Surface)
-                            {
-                                foreach (Vector3d dirRaw in scanDirections)
-                                {
-                                    Vector3d dir =
-                                        dirRaw;
-
-                                    if (!dir.Unitize())
-                                        continue;
-
-                                    List<Vector3d> crackViews =
-                                        CreateCrackViews(
-                                            dir,
-                                            preferredXAxis,
-                                            30.0);
-
-                                    finalViewDirections.AddRange(
-                                        crackViews);
-                                }
-                            }
-                            else
-                            {
-                                foreach (Vector3d dirRaw in scanDirections)
-                                {
-                                    Vector3d dir =
-                                        dirRaw;
-
-                                    if (!dir.Unitize())
-                                        continue;
-
-                                    finalViewDirections.Add(
-                                        dir);
-                                }
-                            }
-
+                            // Add three camera poses for this target:
+                            // perpendicular, -tilt and +tilt.
                             foreach (Vector3d viewDirRaw in finalViewDirections)
                             {
                                 Vector3d viewDir =
@@ -535,12 +597,23 @@ namespace Mimikyu
                                         surfaceTarget,
                                         viewDir,
                                         distance,
-                                        preferredXAxis);
+                                        localXAxis);
+
+                                if (!pose.IsValid)
+                                {
+                                    infoTree.Add(
+                                        "Skipped one pose in region " + r +
+                                        ": CreateCameraPlane returned an invalid plane.",
+                                        outPath);
+
+                                    continue;
+                                }
 
                                 poseTree.Add(
                                     pose,
                                     outPath);
                             }
+
                         }
                     }
                 }
@@ -553,7 +626,134 @@ namespace Mimikyu
             DA.SetDataTree(3, hullTree);
             DA.SetDataTree(4, infoTree);
         }
+        /// <summary>
+        /// Projects a vector onto a plane defined by its normal.
+        /// </summary>
+        private static Vector3d ProjectVectorToPlane(
+            Vector3d vector,
+            Vector3d planeNormal)
+        {
+            Vector3d normal =
+                planeNormal;
 
+            if (!normal.Unitize())
+                return Vector3d.Unset;
+
+            return vector -
+                   (vector * normal) * normal;
+        }
+
+
+        /// <summary>
+        /// Creates an arbitrary vector perpendicular to the supplied normal.
+        /// Used only as a fallback when an object-side axis cannot be projected
+        /// reliably onto the surface tangent plane.
+        /// </summary>
+        private static Vector3d CreatePerpendicularVector(
+            Vector3d normal)
+        {
+            Vector3d n =
+                normal;
+
+            if (!n.Unitize())
+                return Vector3d.Unset;
+
+            Vector3d reference;
+
+            // Choose the global axis least parallel to the surface normal.
+            double dotX =
+                Math.Abs(n * Vector3d.XAxis);
+
+            double dotY =
+                Math.Abs(n * Vector3d.YAxis);
+
+            double dotZ =
+                Math.Abs(n * Vector3d.ZAxis);
+
+            if (dotX <= dotY && dotX <= dotZ)
+                reference = Vector3d.XAxis;
+            else if (dotY <= dotX && dotY <= dotZ)
+                reference = Vector3d.YAxis;
+            else
+                reference = Vector3d.ZAxis;
+
+            Vector3d perpendicular =
+                Vector3d.CrossProduct(
+                    reference,
+                    n);
+
+            if (!perpendicular.Unitize())
+                return Vector3d.Unset;
+
+            return perpendicular;
+        }
+
+
+        /// <summary>
+        /// Creates three scan directions around a local surface normal:
+        /// perpendicular, negative tilt, and positive tilt.
+        /// </summary>
+        private static List<Vector3d> CreateSurfaceNormalViews(
+            Vector3d surfaceNormal,
+            Vector3d rotationAxis,
+            double tiltDegrees)
+        {
+            List<Vector3d> directions =
+                new List<Vector3d>();
+
+            Vector3d normal =
+                surfaceNormal;
+
+            Vector3d axis =
+                rotationAxis;
+
+            if (!normal.Unitize())
+                return directions;
+
+            if (!axis.Unitize())
+            {
+                directions.Add(normal);
+                return directions;
+            }
+
+            double tiltRadians =
+                RhinoMath.ToRadians(
+                    Math.Abs(tiltDegrees));
+
+            // First pose is exactly perpendicular to the surface.
+            directions.Add(normal);
+
+            if (tiltRadians <= RhinoMath.ZeroTolerance)
+                return directions;
+
+            // Negative side view.
+            Vector3d negativeTilt =
+                normal;
+
+            negativeTilt.Transform(
+                Transform.Rotation(
+                    -tiltRadians,
+                    axis,
+                    Point3d.Origin));
+
+            if (negativeTilt.Unitize())
+                directions.Add(negativeTilt);
+
+            // Positive side view.
+            Vector3d positiveTilt =
+                normal;
+
+            positiveTilt.Transform(
+                Transform.Rotation(
+                    tiltRadians,
+                    axis,
+                    Point3d.Origin));
+
+            if (positiveTilt.Unitize())
+                directions.Add(positiveTilt);
+
+            return directions;
+        }
         /// <summary>
         /// Provides an Icon for the component.
         /// </summary>

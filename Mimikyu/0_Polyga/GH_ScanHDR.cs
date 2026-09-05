@@ -21,8 +21,7 @@ namespace Mimikyu.Polyga
         }
 
         private SBScanner scanner = null;
-        List<GH_Point> pointCloud = new List<GH_Point>();
-        List<GH_Colour> colors = new List<GH_Colour>();
+        PointCloud newPC = new PointCloud();
         double maxExposure = 1000.0;
         double minExposure = 0.0;
 
@@ -42,8 +41,10 @@ namespace Mimikyu.Polyga
             pManager[6].Optional = true;
             pManager.AddNumberParameter("Projector Brightness", "PB", "Brightness of the Projector", GH_ParamAccess.item, 2);
             pManager.AddNumberParameter("Camera Gain", "PG", "Gain of the Camera", GH_ParamAccess.item, 2);
-            pManager.AddIntegerParameter("Exposure Steps", "ES", "Number of exposure steps", GH_ParamAccess.item);
-            pManager.AddNumberParameter("Step Size", "SS", "Size of each exposure step", GH_ParamAccess.item);
+            pManager.AddIntegerParameter("Exposure Steps", "ES", "Number of exposure steps", GH_ParamAccess.item, 3);
+            pManager.AddNumberParameter("Step Size", "SS", "Size of each exposure step", GH_ParamAccess.item, 2.0);
+            pManager[9].Optional = true;
+            pManager[10].Optional = true;
         }
 
         /// <summary>
@@ -51,8 +52,7 @@ namespace Mimikyu.Polyga
         /// </summary>
         protected override void RegisterOutputParams(GH_Component.GH_OutputParamManager pManager)
         {
-            pManager.AddPointParameter("Points", "P", "The points", GH_ParamAccess.list);
-            pManager.AddColourParameter("Colors", "C", "The colors", GH_ParamAccess.list);
+            pManager.AddGenericParameter("Points", "P", "The points", GH_ParamAccess.item);
         }
 
         /// <summary>
@@ -70,6 +70,8 @@ namespace Mimikyu.Polyga
             Boolean flashEnabled = true;
             double brightness = 1.0;
             double gain = 1.0;
+            int exposureStep = 3;
+            double stepSize = 2;
 
             if (!DA.GetData(0, ref enabled)) return;
             if (!DA.GetData(1, ref trigger)) return;
@@ -80,6 +82,8 @@ namespace Mimikyu.Polyga
             DA.GetData(6, ref flashEnabled);
             if (!DA.GetData(7, ref brightness)) return;
             if (!DA.GetData(8, ref gain)) return;
+            if (!DA.GetData(9, ref exposureStep)) return;
+            if (!DA.GetData(10, ref stepSize)) return;
 
             if (!enabled)
             {
@@ -137,7 +141,6 @@ namespace Mimikyu.Polyga
                     AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Camera exposure needs to be between: " + minExposure + "-" + maxExposure);
                     return;
                 }
-
                 if (trigger)
                 {
                     SBMesh mesh = new SBMesh();
@@ -168,7 +171,7 @@ namespace Mimikyu.Polyga
                     }
                     //int numSteps = 3;
                     //double exposureStep= (maxExposure - minExposure) / (numSteps - 1);
-                    scanner.scanHDR(out mesh, 3, 10);
+                    scanner.scanHDR(out mesh, exposureStep, stepSize);
 
                     if (mesh == null)
                     {
@@ -176,16 +179,20 @@ namespace Mimikyu.Polyga
                     }
                     else
                     {
+                        newPC = new PointCloud();
                         var vertices = mesh.getVertices();
                         var colorsReturned = mesh.getVertexColors();
 
-                        pointCloud = new List<GH_Point>();
-                        colors = new List<GH_Colour>();
+                        if (vertices == null || colorsReturned == null) return;
+                        if (vertices.Count == 0) return;
 
-                        for (var i = 0; i < vertices.Count; i++)
+                        var newPoints = new List<Point3d>(vertices.Count);
+                        var newColors = new List<Color>(vertices.Count);
+
+                        int count = Math.Min(vertices.Count, colorsReturned.Count);
+                        for (var i = 0; i < count; i++)
                         {
-                            pointCloud.Add(new GH_Point(new Point3d(vertices[i].x, vertices[i].y, vertices[i].z)));
-                            colors.Add(new GH_Colour(Color.FromArgb(colorsReturned[i].r, colorsReturned[i].g, colorsReturned[i].b)));
+                            newPC.Add(new Point3d(vertices[i].x, vertices[i].y, vertices[i].z), Color.FromArgb(colorsReturned[i].r, colorsReturned[i].g, colorsReturned[i].b));
                         }
                     }
                 }
@@ -203,8 +210,7 @@ namespace Mimikyu.Polyga
                 AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Error: " + ex.Message + "\nStack: " + ex.StackTrace);
             }
 
-            DA.SetDataList(0, pointCloud);
-            DA.SetDataList(1, colors);
+            DA.SetData(0, newPC);
         }
 
         /// <summary>
